@@ -14,7 +14,8 @@ decision records for powerwm. Code changes; decisions and constraints must remai
 | 4 | [testing.md](testing.md) | Contributors | How correctness and performance are proven |
 | 5 | [ci-cd.md](ci-cd.md) | Maintainers | How pipelines, gates, and releases work |
 | 6 | [phase-1-validation.md](phase-1-validation.md) | Hardware testers | Phase 1 acceptance steps and current results |
-| 7 | [decisions/](decisions/) | Everyone | Why key choices were made and what they cost |
+| 7 | [protocol-scanner.md](protocol-scanner.md) | Protocol contributors | XML scanner, generated bindings, reflected dispatch |
+| 8 | [decisions/](decisions/) | Everyone | Why key choices were made and what they cost |
 
 ## Conventions
 
@@ -37,11 +38,13 @@ docs/
 ├── testing.md                # Test and performance strategy
 ├── ci-cd.md                  # Pipelines and releases
 ├── phase-1-validation.md     # Hardware acceptance record
+├── protocol-scanner.md       # XML scanner, bindings, reflected dispatch
 └── decisions/
     ├── README.md             # ADR index and template
     ├── 0001-native-compositor.md
     ├── ...
-    └── 0013-c-api-assumes-valid.md
+    ├── 0013-c-api-assumes-valid.md
+    └── 0014-protocol-scanner-reflection.md
 ```
 
 ## Maintenance

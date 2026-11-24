@@ -23,6 +23,7 @@ ADRs capture important, hard-to-reverse technical decisions. They answer:
 | [0011](0011-namespace-and-integers.md) | `pwm` namespace and fixed-width integers | Accepted | 2026-11-24 |
 | [0012](0012-dependent-resource-creation.md) | Dependent resources are created by their host | Accepted | 2026-11-24 |
 | [0013](0013-c-api-assumes-valid.md) | C API wrappers assume valid objects | Accepted | 2026-11-24 |
+| [0014](0014-protocol-scanner-reflection.md) | XML protocol scanner with reflected request dispatch | Accepted | 2026-11-24 |
 
 ## Status definitions
 

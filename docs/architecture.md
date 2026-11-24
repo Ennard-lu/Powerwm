@@ -313,7 +313,9 @@ output_node
 ### wayland/
 
 - in-tree wire protocol, object table, IDs, versions, destruction, errors;
-- XML parser and C++ descriptor generator, no `wayland-scanner`;
+- in-tree XML parser and build-time C++ descriptor scanner, no `wayland-scanner`;
+- generated core and xdg-shell message codecs;
+- reflection finds `request_<name>` handlers from generated interface descriptors;
 - one `client_session` coroutine per connection;
 - protocol parameters are validated; malformed input returns protocol errors;
 - input focus and scene focus are separate.

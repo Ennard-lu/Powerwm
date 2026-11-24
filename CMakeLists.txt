@@ -62,6 +62,65 @@ target_include_directories(powerwm_core PUBLIC
 )
 target_link_libraries(powerwm_core PUBLIC Libdrm::Libdrm)
 
+add_library(powerwm_protocol_scan STATIC
+    src/wayland/xml.cpp
+    src/wayland/protocol.cpp
+)
+target_link_libraries(powerwm_protocol_scan PUBLIC powerwm_core)
+
+add_executable(powerwm_protocol_scanner tools/protocol_scanner.cpp)
+target_link_libraries(powerwm_protocol_scanner PRIVATE powerwm_protocol_scan)
+
+set(POWERWM_GENERATED_PROTOCOL_DIR "${CMAKE_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${POWERWM_GENERATED_PROTOCOL_DIR}")
+set(POWERWM_PROTOCOL_OUTPUTS "")
+
+add_custom_command(
+    OUTPUT
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/wayland_bindings.hpp"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/wayland_bindings.cpp"
+    COMMAND $<TARGET_FILE:powerwm_protocol_scanner>
+        "${CMAKE_SOURCE_DIR}/protocols/wayland.xml"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/wayland_bindings.hpp"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/wayland_bindings.cpp"
+    DEPENDS powerwm_protocol_scanner "${CMAKE_SOURCE_DIR}/protocols/wayland.xml"
+    COMMENT "Generating Wayland core bindings"
+    VERBATIM
+)
+list(APPEND POWERWM_PROTOCOL_OUTPUTS
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/wayland_bindings.hpp"
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/wayland_bindings.cpp")
+
+add_custom_command(
+    OUTPUT
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.hpp"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.cpp"
+    COMMAND $<TARGET_FILE:powerwm_protocol_scanner>
+        "${CMAKE_SOURCE_DIR}/protocols/xdg-shell.xml"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.hpp"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.cpp"
+    DEPENDS powerwm_protocol_scanner "${CMAKE_SOURCE_DIR}/protocols/xdg-shell.xml"
+    COMMENT "Generating xdg-shell bindings"
+    VERBATIM
+)
+list(APPEND POWERWM_PROTOCOL_OUTPUTS
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.hpp"
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.cpp")
+
+add_custom_target(powerwm_protocols DEPENDS ${POWERWM_PROTOCOL_OUTPUTS})
+
+add_library(powerwm_wayland STATIC
+    src/wayland/wire.cpp
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/wayland_bindings.cpp"
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.cpp"
+)
+target_include_directories(powerwm_wayland PUBLIC
+    ${CMAKE_SOURCE_DIR}/src
+    "${POWERWM_GENERATED_PROTOCOL_DIR}"
+)
+target_link_libraries(powerwm_wayland PUBLIC powerwm_core powerwm_protocol_scan)
+add_dependencies(powerwm_wayland powerwm_protocols)
+
 add_library(powerwm_input STATIC
     src/platform/input/context.cpp
 )
@@ -188,4 +247,8 @@ if(BUILD_TESTING)
         SKIP_RETURN_CODE 77
         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0:abort_on_error=1:strict_string_checks=1"
     )
+
+    add_executable(powerwm_wayland_tests tests/unit/test_wayland.cpp)
+    target_link_libraries(powerwm_wayland_tests PRIVATE powerwm_wayland)
+    add_test(NAME unit.wayland COMMAND powerwm_wayland_tests)
 endif()

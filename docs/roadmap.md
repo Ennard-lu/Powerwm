@@ -150,12 +150,14 @@ libwayland.
 
 ### 3A — Wire and coroutine runtime (4–6 weeks)
 
-- message headers, argument encoding, versions, errors;
-- `SCM_RIGHTS` fd passing and partial reads/writes;
-- object table, client IDs, interfaces, lifetime;
-- XML parser and C++ descriptor generator (no `wayland-scanner`);
-- event loop coroutine scheduler, cancellation, timers;
-- in-tree test client and wire fuzzing.
+- [x] message headers and argument encoding;
+- [x] XML parser and C++ descriptor generator (no `wayland-scanner`);
+- [x] generated core and xdg-shell bindings with typed codecs;
+- [x] C++26 reflection request dispatch;
+- [ ] `SCM_RIGHTS` fd passing and partial reads/writes;
+- [ ] object table, client IDs, interfaces, lifetime;
+- [ ] event loop coroutine scheduler, cancellation, timers;
+- [ ] in-tree test client and wire fuzzing.
 
 Exit: handshake with real libwayland clients; fd stress test; protocol errors do not
 crash; 24-hour fuzz; no `libwayland-*` in `ldd`.

@@ -2,7 +2,7 @@
 
 > 一个直接运行在 Linux DRM/KMS 之上、使用现代 C++ 从零构建的 Wayland 合成器与平铺窗口管理器。
 
-**状态：Phase 2（画布）已完成 · 尚不可日常使用**
+**状态：Phase 3（协议）进行中 · 尚不可日常使用**
 **许可证：Apache-2.0**
 
 powerwm 的目标不是再做一个配置层，而是构建一条完整、可控、可测量的图形栈：
@@ -49,6 +49,8 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `src/platform/headless/`：headless 输出骨架与提交/翻页计数。
 - `src/render/vulkanpp/`：Vulkan instance、逻辑设备/队列、命令池/命令缓冲、fence、图像/回读缓冲、纹理上传、DMA-BUF 导出与格式/modifier 协商、场景渲染器（圆角、阴影、模糊、变换、裁剪、damage 局部重绘）。
 - `src/scene/`：节点树、样式、父子裁剪、事务与 surface/scene/output damage 合并。
+- `src/wayland/`：XML 解析、协议模型、wire 消息读写、生成 binding 与反射请求分发。
+- `protocols/`：随仓库维护的 `wayland.xml` 与 `xdg-shell.xml`，构建时由 scanner 生成 C++ binding。
 - `src/platform/gbm/`：早期 `libgbm` 封装，Vulkan 后端落地后评估移除。
 - `src/app/main.cpp`：应用骨架，无参数时打印版本与帮助，不触碰 DRM。
 - `tools/drm_bringup.cpp`：事件驱动 DRM/KMS demo，DRM fd、timerfd、seat dispatch 与 input fd 共用事件循环；双缓冲 page flip 与 VT 暂停/恢复。
@@ -61,8 +63,9 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `tools/vulkan_pipeline_probe.cpp`：Vulkan render pass / shader / fullscreen triangle 读回探针。
 - `tools/vulkan_compositor.cpp`：事件循环、seat/VT、场景渲染与双缓冲 KMS page flip 合成器演示。
 - `tools/render_benchmark.cpp`：1080p 下 100 个 256×256 动画 surface 的帧预算基准。
+- `tools/protocol_scanner.cpp`：扫描协议 XML，生成接口描述、消息编解码与反射处理函数名。
 - CMake 目标：`powerwm_core`（静态库）、`powerwm`（应用）、`powerwm_drm_bringup`（工具）、`powerwm_tests`。
-- 当前构建已启用 `-fno-exceptions`；自研 Wayland 协议栈属于 Phase 3。
+- 当前构建已启用 `-fno-exceptions`；Wayland 协议层已进入 Phase 3，socket、对象表与协程会话仍在实现中。
 
 > 本次文档基于本地环境验证：GCC 16.2.1、CMake 4.5.1、Ninja 1.13.2、libdrm 2.4.134、GBM 26.3.1。presets `dev`/`release`/`asan` 均已通过构建与冒烟测试。
 

@@ -34,7 +34,7 @@ from the first frame.
 
 ## Current status
 
-**Phase 2 complete — Vulkan scene composition works end to end. Not usable as a daily desktop yet.**
+**Phase 3 in progress — in-tree Wayland protocol scanner, bindings, and reflection dispatch. Not usable as a daily desktop yet.**
 
 Working today:
 
@@ -47,10 +47,12 @@ Working today:
 - event-loop compositor with seat and VT pause/resume
 - golden-image, damage, allocation, and frame-budget tests
 - headless output and diagnostics for DRM outputs and Vulkan devices
+- in-tree XML protocol scanner generating Wayland core and xdg-shell bindings
+- wire message reader/writer and reflection-based request dispatch
 
 Still ahead:
 
-- the in-tree Wayland protocol stack
+- Wayland socket transport, object table, coroutine sessions, and real clients
 - tiling layouts, workspaces, and window policy
 - the desktop shell, theming, and animation system
 - ecosystem compatibility, packaging, and 1.0 hardening
@@ -62,7 +64,7 @@ Still ahead:
 | 0 | Foundation | complete |
 | 1 | Native display, input, seat, hotplug | implemented, hardware validation in progress |
 | 2 | Vulkan rendering and scene graph | complete |
-| 3 | Wayland protocol stack | next |
+| 3 | Wayland protocol stack | **in progress** |
 | 4 | Tiling window management | upcoming |
 | 5 | Desktop shell and visual system | upcoming |
 | 6 | Ecosystem compatibility | upcoming |
