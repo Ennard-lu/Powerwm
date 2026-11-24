@@ -2,7 +2,7 @@
 
 > 一个直接运行在 Linux DRM/KMS 之上、使用现代 C++ 从零构建的 Wayland 合成器与平铺窗口管理器。
 
-**状态：Phase 1（点亮）· 实现完成，硬件验收进行中 · 尚不可日常使用**
+**状态：Phase 2（画布）· Vulkan 基础起步 · 尚不可日常使用**
 **许可证：Apache-2.0**
 
 powerwm 的目标不是再做一个配置层，而是构建一条完整、可控、可测量的图形栈：
@@ -46,12 +46,14 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `src/platform/seat/`：`libseat` 会话封装，设备打开与 VT enable/disable 事件；DRM 工具可用时走该路径。
 - `src/platform/udev/`：DRM 热插拔 udev monitor。
 - `src/platform/headless/`：headless 输出骨架与提交/翻页计数。
+- `src/render/vulkanpp/`：Vulkan instance、物理设备选择、逻辑设备与队列 RAII 封装。
 - `src/platform/gbm/`：早期 `libgbm` 封装，Vulkan 后端落地后评估移除。
 - `src/app/main.cpp`：应用骨架，无参数时打印版本与帮助，不触碰 DRM。
 - `tools/drm_bringup.cpp`：事件驱动 DRM/KMS demo，DRM fd、timerfd、seat dispatch 与 input fd 共用事件循环；双缓冲 page flip 与 VT 暂停/恢复。
 - `tools/input_probe.cpp`：5 秒输入事件探针。
 - `tools/seat_probe.cpp`：5 秒 seat 会话探针。
 - `tools/probe.cpp`：只读 DRM 输出诊断（`powerwm_probe`）。
+- `tools/vulkan_probe.cpp`：Vulkan instance/device 诊断（`powerwm_vulkan_probe`）。
 - CMake 目标：`powerwm_core`（静态库）、`powerwm`（应用）、`powerwm_drm_bringup`（工具）、`powerwm_tests`。
 - 当前构建已启用 `-fno-exceptions`；Vulkan 渲染栈与自研 Wayland 协议栈尚未接入，属于 Phase 2/3。
 
@@ -95,6 +97,7 @@ sudo ./build/dev/powerwm_drm_bringup [frame-count]
 ./build/dev/powerwm_input_probe
 ./build/dev/powerwm_seat_probe
 ./build/dev/powerwm_probe
+./build/dev/powerwm_vulkan_probe
 ```
 
 ### 构建信息
@@ -191,8 +194,8 @@ flowchart TB
 | 阶段 | 代号 | 目标 | 状态 |
 | --- | --- | --- | --- |
 | P0 | 地基 | 工程化、CI、目录重构、测试骨架、ADR | **进行中** |
-| P1 | 点亮 | DRM/KMS 稳定出图、page flip、VT 切换、热插拔 | **进行中** |
-| P2 | 画布 | Vulkan/vulkanpp 渲染器、场景图、DMA-BUF、损坏跟踪 | 待开始 |
+| P1 | 点亮 | DRM/KMS 稳定出图、page flip、VT 切换、热插拔 | 实现完成，验收中 |
+| P2 | 画布 | Vulkan/vulkanpp 渲染器、场景图、DMA-BUF、损坏跟踪 | **进行中** |
 | P3 | 语言 | 自研 Wayland wire protocol、协程协议引擎、xdg-shell、输入、剪贴板 | 待开始 |
 | P4 | 秩序 | 平铺布局、工作区、焦点、键位、IPC | 待开始 |
 | P5 | 肌肤 | 面板、启动器、通知、锁屏、主题、动画 | 待开始 |

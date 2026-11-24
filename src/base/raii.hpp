@@ -18,7 +18,8 @@ struct without_valid_check_t {};
 constexpr inline without_valid_check_t without_valid_check;
 
 template <typename T, typename... Args>
-requires(std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>)
+requires(std::is_nothrow_move_constructible_v<T> && std::is_move_assignable_v<T> &&
+         std::is_default_constructible_v<T>)
 class raii {
   public:
     using value_t = std::remove_all_extents_t<T>;
@@ -26,7 +27,7 @@ class raii {
     raii() noexcept = default;
 
     raii(value_t&& value, const Args&... arguments) noexcept
-        : owns_(true), value_(value), arguments_(arguments...) {
+        : owns_(true), value_(std::move(value)), arguments_(arguments...) {
         if (!value_.valid()) {
             terminate_with_message("raii received an invalid handle");
         }
@@ -40,7 +41,8 @@ class raii {
     auto operator=(const raii&) -> raii& = delete;
 
     raii(raii&& other) noexcept
-        : owns_(other.owns_), value_(other.value_), arguments_(std::move(other.arguments_)) {
+        : owns_(other.owns_), value_(std::move(other.value_)),
+          arguments_(std::move(other.arguments_)) {
         other.owns_ = false;
     }
 
@@ -50,7 +52,7 @@ class raii {
         }
         destroy_owned();
         owns_ = other.owns_;
-        value_ = other.value_;
+        value_ = std::move(other.value_);
         arguments_ = std::move(other.arguments_);
         other.owns_ = false;
         return *this;
@@ -62,7 +64,7 @@ class raii {
 
     [[nodiscard]] auto release() noexcept -> value_t {
         owns_ = false;
-        return value_;
+        return std::move(value_);
     }
 
     [[nodiscard]] auto is_owned() const noexcept -> bool {

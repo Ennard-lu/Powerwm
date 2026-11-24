@@ -136,7 +136,8 @@ P0 地基 ──► P1 点亮 ──► P2 画布 ──► P3 语言 ──► 
 
 ### 交付物
 
-- `vulkanpp`：Vulkan 实例、物理/逻辑设备、队列、命令池、同步对象的 `create`/`destroy` + RAII 封装。
+- [x] `vulkanpp`：Vulkan 实例、物理/逻辑设备、队列的 `create`/`destroy` + RAII 封装。
+- [ ] `vulkanpp`：命令池、同步对象、交换链/外部内存封装。
 - Vulkan 合成后端：离屏渲染到可导出图像，经 DMA-BUF 交给 KMS 扫描输出。
 - 平面渲染管线：纹理、变换、裁剪、圆角、阴影、简单模糊（可选）。
 - 场景图：`node` / `surface_node` / `container_node` / `effect_node`，显式父子与变换。

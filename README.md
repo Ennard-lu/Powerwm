@@ -6,7 +6,7 @@
 [![CI](https://github.com/Ennard-lu/Powerwm/actions/workflows/ci.yml/badge.svg)](https://github.com/Ennard-lu/Powerwm/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status: Phase 1 (ignition) · implementation complete, hardware validation in progress · not usable as a daily desktop**
+**Status: Phase 2 (canvas) · early Vulkan foundation · not usable as a daily desktop**
 
 ## Why powerwm
 
@@ -51,12 +51,14 @@ The repository currently contains the Phase 0 foundation and a DRM/KMS bring-up 
 - `src/platform/seat/` — libseat session wrapper for device access and VT enable/disable events; the DRM tool uses it when available.
 - `src/platform/udev/` — udev monitor for DRM hotplug events.
 - `src/platform/headless/` — headless output skeleton with commit/page-flip accounting.
+- `src/render/vulkanpp/` — Vulkan instance, physical-device selection, logical device, and queue RAII wrappers.
 - `src/platform/gbm/` — early libgbm wrapper; will be evaluated after the Vulkan backend lands.
 - `src/app/main.cpp` — application skeleton; prints version/help and never touches DRM.
 - `tools/drm_bringup.cpp` — event-driven DRM/KMS demo: DRM fd, timerfd, seat dispatch, and input fd share one loop; double-buffered page flips and VT pause/resume.
 - `tools/input_probe.cpp` — five-second libinput event probe for keyboard, pointer, and touch input.
 - `tools/seat_probe.cpp` — five-second libseat session probe.
 - `tools/probe.cpp` — read-only DRM output diagnostics (`powerwm_probe`).
+- `tools/vulkan_probe.cpp` — Vulkan instance/device diagnostics (`powerwm_vulkan_probe`).
 - `tests/unit/` — CTest coverage for `result`, `raii`, and the multi-fd event loop.
 
 The Wayland protocol engine, Vulkan renderer, scene graph, and window manager are not
@@ -126,8 +128,8 @@ not know about `wm`; `wm` does not know the rendering backend. See
 | Phase | Codename | Goal | Status |
 | --- | --- | --- | --- |
 | P0 | Foundation | Engineering, CI, base/platform split, test and policy gates | mostly complete |
-| P1 | Ignition | Stable DRM/KMS output, page flip, VT switch, hotplug | **in progress** |
-| P2 | Canvas | Vulkan renderer, scene graph, DMA-BUF, damage tracking | pending |
+| P1 | Ignition | Stable DRM/KMS output, page flip, VT switch, hotplug | implemented, validation in progress |
+| P2 | Canvas | Vulkan renderer, scene graph, DMA-BUF, damage tracking | **in progress** |
 | P3 | Language | In-tree Wayland wire protocol, coroutine engine, core protocols | pending |
 | P4 | Order | Tiling layouts, workspaces, focus, keybindings, IPC | pending |
 | P5 | Skin | Panel, launcher, notifications, lock screen, theming, animation | pending |
@@ -187,6 +189,7 @@ sudo ./build/dev/powerwm_drm_bringup [frame-count]
 ./build/dev/powerwm_input_probe
 ./build/dev/powerwm_seat_probe
 ./build/dev/powerwm_probe
+./build/dev/powerwm_vulkan_probe
 ```
 
 ## Build metadata

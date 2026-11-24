@@ -16,6 +16,7 @@ include(cmake/PowerWMBuildInfo.cmake)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
 find_package(Libdrm REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(Vulkan REQUIRED)
 pkg_check_modules(Libinput REQUIRED IMPORTED_TARGET libinput)
 pkg_check_modules(Libudev REQUIRED IMPORTED_TARGET libudev)
 pkg_check_modules(Libseat REQUIRED IMPORTED_TARGET libseat)
@@ -55,6 +56,15 @@ target_link_libraries(powerwm_seat PUBLIC
     PkgConfig::Libseat
 )
 
+add_library(powerwm_vulkanpp STATIC
+    src/render/vulkanpp/instance.cpp
+    src/render/vulkanpp/device.cpp
+)
+target_link_libraries(powerwm_vulkanpp PUBLIC
+    powerwm_core
+    Vulkan::Vulkan
+)
+
 add_library(powerwm_udev STATIC
     src/platform/udev/monitor.cpp
 )
@@ -78,6 +88,9 @@ if(POWERWM_BUILD_BRINGUP_TOOL)
 
     add_executable(powerwm_probe tools/probe.cpp)
     target_link_libraries(powerwm_probe PRIVATE powerwm_core)
+
+    add_executable(powerwm_vulkan_probe tools/vulkan_probe.cpp)
+    target_link_libraries(powerwm_vulkan_probe PRIVATE powerwm_vulkanpp)
 endif()
 
 if(BUILD_TESTING)
