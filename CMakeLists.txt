@@ -99,6 +99,9 @@ if(POWERWM_BUILD_BRINGUP_TOOL)
 
     add_executable(powerwm_vulkan_dmabuf_probe tools/vulkan_dmabuf_probe.cpp)
     target_link_libraries(powerwm_vulkan_dmabuf_probe PRIVATE powerwm_vulkanpp)
+
+    add_executable(powerwm_vulkan_kms_demo tools/vulkan_kms_demo.cpp)
+    target_link_libraries(powerwm_vulkan_kms_demo PRIVATE powerwm_vulkanpp)
 endif()
 
 if(BUILD_TESTING)

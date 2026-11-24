@@ -140,7 +140,7 @@ P0 地基 ──► P1 点亮 ──► P2 画布 ──► P3 语言 ──► 
 - [x] `vulkanpp`：命令池、命令缓冲、fence 与队列提交。
 - [x] `vulkanpp`：图像、回读缓冲、离屏 clear/readback。
 - [x] DMA-BUF 导出与 KMS framebuffer 导入。
-- [ ] Vulkan 图像直接进入 KMS page flip。
+- [x] Vulkan 图像直接进入 KMS page flip（TTY3 已验证）。
 - [ ] 交换链与修饰符协商。
 - Vulkan 合成后端：离屏渲染到可导出图像，经 DMA-BUF 交给 KMS 扫描输出。
 - 平面渲染管线：纹理、变换、裁剪、圆角、阴影、简单模糊（可选）。

@@ -31,6 +31,7 @@
 - `vulkanpp` command pool / command buffer / fence / queue submit，并在探针中完成空命令提交。
 - `vulkanpp` image / readback buffer / offscreen clear+readback；探针验证 RGBA clear 像素。
 - Vulkan DMA-BUF 导出与 KMS framebuffer 导入；`powerwm_vulkan_dmabuf_probe` 验证 64x64 图像导入。
+- `powerwm_vulkan_kms_demo` 将 Vulkan 离屏图像经 DMA-BUF 直接通过 KMS page flip 显示；TTY3 实测通过。
 - ADR-0013：C API 封装假定对象合法，移除封装层 null/valid 防护；`raii` 不再检查 `valid()`。
 - 依赖 DRM device 的资源改由 `device::create_*` 创建；统一使用 `auto foo() -> T` 函数声明风格。
 - 英文 README；中文 README 移至 `docs/README.zh-CN.md`。

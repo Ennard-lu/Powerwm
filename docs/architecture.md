@@ -134,7 +134,7 @@ powerwm/
 │   │   └── headless/            # 目标：测试后端
 │   ├── render/
 │   │   ├── vulkan/              # 目标：Vulkan 合成后端
-│   │   └── vulkanpp/            # Vulkan C API RAII（device/command/image/DMA-BUF）
+│   │   └── vulkanpp/            # Vulkan C API RAII（device/command/image/DMA-BUF/KMS）
 │   ├── scene/
 │   ├── wayland/
 │   │   ├── wire/                # 目标：消息头、编解码、SCM_RIGHTS

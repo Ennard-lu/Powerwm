@@ -56,6 +56,7 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `tools/probe.cpp`：只读 DRM 输出诊断（`powerwm_probe`）。
 - `tools/vulkan_probe.cpp`：Vulkan instance/device/队列提交/离屏 clear 诊断（`powerwm_vulkan_probe`）。
 - `tools/vulkan_dmabuf_probe.cpp`：Vulkan DMA-BUF 导出与 KMS framebuffer 导入诊断。
+- `tools/vulkan_kms_demo.cpp`：Vulkan 离屏图像 → DMA-BUF → KMS page flip 演示。
 - CMake 目标：`powerwm_core`（静态库）、`powerwm`（应用）、`powerwm_drm_bringup`（工具）、`powerwm_tests`。
 - 当前构建已启用 `-fno-exceptions`；Vulkan 渲染栈与自研 Wayland 协议栈尚未接入，属于 Phase 2/3。
 
