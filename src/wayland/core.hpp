@@ -179,6 +179,8 @@ class core_protocol {
 
     [[nodiscard]] auto keyboards() const noexcept -> std::span<const object_id>;
 
+    [[nodiscard]] auto pointers() const noexcept -> std::span<const object_id>;
+
     [[nodiscard]] auto send_keyboard_keymap(object_id id) -> result<void>;
 
     auto set_surface_commit_callback(surface_commit_callback callback, void* context) noexcept

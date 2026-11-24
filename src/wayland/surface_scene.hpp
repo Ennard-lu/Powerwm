@@ -11,6 +11,7 @@
 #include <wayland/core.hpp>
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -26,6 +27,10 @@ class surface_scene {
         -> result<void>;
 
     [[nodiscard]] auto set_surface_bounds(u64 surface_key, base::recti bounds) -> result<void>;
+
+    [[nodiscard]] auto surface_bounds(u64 surface_key) const noexcept -> std::optional<base::recti>;
+
+    [[nodiscard]] auto hit_test(f64 x, f64 y) const noexcept -> std::optional<u64>;
 
     [[nodiscard]] auto scene_graph() noexcept -> scene::scene&;
 

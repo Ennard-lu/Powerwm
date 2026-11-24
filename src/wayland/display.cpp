@@ -152,6 +152,112 @@ auto display_service::send_keyboard_modifiers(u32 depressed, u32 latched, u32 lo
     return {};
 }
 
+auto display_service::send_pointer_enter(object_id surface, f64 x, f64 y) -> result<void> {
+    for (const object_id pointer : core_.pointers()) {
+        generated::wl_pointer::event_enter event{};
+        std::get<0>(event.arguments) = next_serial();
+        std::get<1>(event.arguments) = surface;
+        std::get<2>(event.arguments) = x;
+        std::get<3>(event.arguments) = y;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_pointer::event_enter::encode(writer, pointer, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto display_service::send_pointer_leave(object_id surface) -> result<void> {
+    for (const object_id pointer : core_.pointers()) {
+        generated::wl_pointer::event_leave event{};
+        std::get<0>(event.arguments) = next_serial();
+        std::get<1>(event.arguments) = surface;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_pointer::event_leave::encode(writer, pointer, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto display_service::send_pointer_motion(u32 time_ms, f64 x, f64 y) -> result<void> {
+    for (const object_id pointer : core_.pointers()) {
+        generated::wl_pointer::event_motion event{};
+        std::get<0>(event.arguments) = time_ms;
+        std::get<1>(event.arguments) = x;
+        std::get<2>(event.arguments) = y;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_pointer::event_motion::encode(writer, pointer, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto display_service::send_pointer_button(u32 time_ms, u32 button, bool pressed) -> result<void> {
+    for (const object_id pointer : core_.pointers()) {
+        generated::wl_pointer::event_button event{};
+        std::get<0>(event.arguments) = next_serial();
+        std::get<1>(event.arguments) = time_ms;
+        std::get<2>(event.arguments) = button;
+        std::get<3>(event.arguments) = pressed ? 1U : 0U;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_pointer::event_button::encode(writer, pointer, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto display_service::send_pointer_axis(u32 time_ms, u32 axis, f64 value) -> result<void> {
+    for (const object_id pointer : core_.pointers()) {
+        generated::wl_pointer::event_axis event{};
+        std::get<0>(event.arguments) = time_ms;
+        std::get<1>(event.arguments) = axis;
+        std::get<2>(event.arguments) = value;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_pointer::event_axis::encode(writer, pointer, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto display_service::send_pointer_frame() -> result<void> {
+    for (const object_id pointer : core_.pointers()) {
+        generated::wl_pointer::event_frame event{};
+        protocol_writer writer;
+        if (auto encoded = generated::wl_pointer::event_frame::encode(writer, pointer, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
 auto display_service::set_surface_commit_callback(surface_commit_callback callback,
                                                   void* context) noexcept -> void {
     core_.set_surface_commit_callback(callback, context);

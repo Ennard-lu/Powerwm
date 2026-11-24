@@ -131,6 +131,32 @@ auto surface_scene::set_surface_bounds(u64 surface_key, base::recti bounds) -> r
     return {};
 }
 
+auto surface_scene::surface_bounds(u64 surface_key) const noexcept -> std::optional<base::recti> {
+    const auto iterator =
+        std::ranges::find_if(surfaces_, [surface_key](const std::unique_ptr<surface_entry>& entry) {
+            return entry->surface == surface_key;
+        });
+    if (iterator == surfaces_.end()) {
+        return std::nullopt;
+    }
+    return (*iterator)->node.bounds();
+}
+
+auto surface_scene::hit_test(f64 x, f64 y) const noexcept -> std::optional<u64> {
+    for (auto iterator = surfaces_.rbegin(); iterator != surfaces_.rend(); ++iterator) {
+        const auto& entry = **iterator;
+        if (!entry.node.visible() || entry.texture == nullptr) {
+            continue;
+        }
+        const base::recti bounds = entry.node.bounds();
+        if (x >= static_cast<f64>(bounds.x) && x < static_cast<f64>(bounds.right()) &&
+            y >= static_cast<f64>(bounds.y) && y < static_cast<f64>(bounds.bottom())) {
+            return entry.surface;
+        }
+    }
+    return std::nullopt;
+}
+
 auto surface_scene::scene_graph() noexcept -> scene::scene& {
     return graph_;
 }

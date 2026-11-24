@@ -63,6 +63,8 @@ pre-1.0 `0.x.y` convention.
   scene → DMA-BUF → KMS page flip; verified on TTY3 with an in-tree wire client.
 - Keyboard keymap, enter, key, and modifier events; libinput keyboard forwarding in the
   KMS compositor.
+- Pointer enter/leave/motion/button/axis/frame events, scene hit testing, and libinput
+  pointer forwarding.
 - Surface-scene bridge: shm commits upload strided BGRA/RGBA textures into scene nodes
   and render through the Vulkan scene renderer.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

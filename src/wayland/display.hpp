@@ -76,6 +76,18 @@ class display_service {
     [[nodiscard]] auto send_keyboard_modifiers(u32 depressed, u32 latched, u32 locked, u32 group)
         -> result<void>;
 
+    [[nodiscard]] auto send_pointer_enter(object_id surface, f64 x, f64 y) -> result<void>;
+
+    [[nodiscard]] auto send_pointer_leave(object_id surface) -> result<void>;
+
+    [[nodiscard]] auto send_pointer_motion(u32 time_ms, f64 x, f64 y) -> result<void>;
+
+    [[nodiscard]] auto send_pointer_button(u32 time_ms, u32 button, bool pressed) -> result<void>;
+
+    [[nodiscard]] auto send_pointer_axis(u32 time_ms, u32 axis, f64 value) -> result<void>;
+
+    [[nodiscard]] auto send_pointer_frame() -> result<void>;
+
     auto set_surface_commit_callback(surface_commit_callback callback, void* context) noexcept
         -> void;
 

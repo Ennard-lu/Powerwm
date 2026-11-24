@@ -20,6 +20,7 @@
 #include <wayland/display.hpp>
 #include <wayland/surface_scene.hpp>
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -78,6 +79,9 @@ struct compositor_state {
     bool waiting_for_flip = false;
     bool allow_modeset = true;
     bool running = true;
+    pwm::f64 cursor_x = 0.0;
+    pwm::f64 cursor_y = 0.0;
+    pwm::u64 pointer_focus = 0;
     pwm::u32 frame = 0;
     pwm::u32 frame_count = 180;
     pwm::u32 waiting_ticks = 0;
@@ -166,6 +170,15 @@ auto on_listener(void* context, event::poll_event) -> void {
     accept_client(*static_cast<compositor_state*>(context));
 }
 
+auto find_client(compositor_state& state, pwm::u32 index) -> client_session* {
+    for (const auto& session : state.clients) {
+        if (session->index == index) {
+            return session.get();
+        }
+    }
+    return nullptr;
+}
+
 auto on_input_event(void* context, event::poll_event) -> void {
     auto& state = *static_cast<compositor_state*>(context);
     if (auto dispatched = state.input->dispatch(); !dispatched) {
@@ -173,16 +186,76 @@ auto on_input_event(void* context, event::poll_event) -> void {
         return;
     }
     while (auto input_event = state.input->next_event()) {
-        if (input_event->type != input::input_event_type::keyboard_key) {
+        if (input_event->type == input::input_event_type::keyboard_key) {
+            for (const auto& session : state.clients) {
+                if (session->closed) {
+                    continue;
+                }
+                static_cast<void>(session->display.send_keyboard_key(
+                    input_event->time_ms, input_event->key_code + 8, input_event->pressed));
+                static_cast<void>(session->connection.flush());
+            }
             continue;
         }
-        for (const auto& session : state.clients) {
-            if (session->closed) {
-                continue;
+        if (input_event->type == input::input_event_type::pointer_motion) {
+            state.cursor_x = std::clamp(state.cursor_x + input_event->dx, 0.0,
+                                        static_cast<pwm::f64>(state.output->mode.width_px() - 1));
+            state.cursor_y = std::clamp(state.cursor_y + input_event->dy, 0.0,
+                                        static_cast<pwm::f64>(state.output->mode.height_px() - 1));
+            const auto hit = state.scene->hit_test(state.cursor_x, state.cursor_y);
+            const pwm::u64 next_focus = hit.value_or(0);
+            if (next_focus != state.pointer_focus) {
+                if (state.pointer_focus != 0) {
+                    auto* old_client =
+                        find_client(state, static_cast<pwm::u32>(state.pointer_focus >> 32U));
+                    if (old_client != nullptr) {
+                        static_cast<void>(old_client->display.send_pointer_leave(
+                            static_cast<wayland::object_id>(state.pointer_focus)));
+                        static_cast<void>(old_client->connection.flush());
+                    }
+                }
+                state.pointer_focus = next_focus;
+                if (next_focus != 0) {
+                    auto* client = find_client(state, static_cast<pwm::u32>(next_focus >> 32U));
+                    const auto bounds = state.scene->surface_bounds(next_focus);
+                    if (client != nullptr && bounds) {
+                        static_cast<void>(client->display.send_pointer_enter(
+                            static_cast<wayland::object_id>(next_focus), state.cursor_x - bounds->x,
+                            state.cursor_y - bounds->y));
+                        static_cast<void>(client->connection.flush());
+                    }
+                }
             }
-            static_cast<void>(session->display.send_keyboard_key(
-                input_event->time_ms, input_event->key_code + 8, input_event->pressed));
-            static_cast<void>(session->connection.flush());
+            if (state.pointer_focus != 0) {
+                auto* client =
+                    find_client(state, static_cast<pwm::u32>(state.pointer_focus >> 32U));
+                const auto bounds = state.scene->surface_bounds(state.pointer_focus);
+                if (client != nullptr && bounds) {
+                    static_cast<void>(client->display.send_pointer_motion(
+                        input_event->time_ms, state.cursor_x - bounds->x,
+                        state.cursor_y - bounds->y));
+                    static_cast<void>(client->display.send_pointer_frame());
+                    static_cast<void>(client->connection.flush());
+                }
+            }
+        } else if (input_event->type == input::input_event_type::pointer_button &&
+                   state.pointer_focus != 0) {
+            auto* client = find_client(state, static_cast<pwm::u32>(state.pointer_focus >> 32U));
+            if (client != nullptr) {
+                static_cast<void>(client->display.send_pointer_button(
+                    input_event->time_ms, input_event->button, input_event->pressed));
+                static_cast<void>(client->display.send_pointer_frame());
+                static_cast<void>(client->connection.flush());
+            }
+        } else if (input_event->type == input::input_event_type::pointer_axis &&
+                   state.pointer_focus != 0) {
+            auto* client = find_client(state, static_cast<pwm::u32>(state.pointer_focus >> 32U));
+            if (client != nullptr) {
+                static_cast<void>(client->display.send_pointer_axis(
+                    input_event->time_ms, input_event->axis, input_event->axis_value));
+                static_cast<void>(client->display.send_pointer_frame());
+                static_cast<void>(client->connection.flush());
+            }
         }
     }
 }
@@ -634,6 +707,8 @@ int main(int argc, char** argv) {
     state.timer = &timer.value();
     state.session_enabled = session == nullptr || session->is_enabled();
     state.frame_count = *frame_count;
+    state.cursor_x = static_cast<pwm::f64>(output.mode.width_px()) / 2.0;
+    state.cursor_y = static_cast<pwm::f64>(output.mode.height_px()) / 2.0;
 
     require_value(run_loop(state));
     std::println("presented {} frames", state.frame);

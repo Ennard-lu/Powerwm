@@ -139,7 +139,7 @@ connect to validate `wl_registry`, `wl_display.sync`, and global discovery witho
 `powerwm_wayland_kms_compositor` combines that server with the Vulkan scene renderer and
 KMS presentation. Client shm commits become textures, scene nodes, DMA-BUF frames, and
 atomic page flips. Keyboard keymap and key/modifier events are forwarded through
-`wl_keyboard`.
+`wl_keyboard`; pointer enter/leave/motion/button/axis/frame events use scene hit testing.
 
 Client-id lifetime, pointer/touch input routing, clipboard/DnD, linux-dmabuf, coroutine
 sessions, and real external client validation are the next Phase 3 steps.

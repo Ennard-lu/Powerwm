@@ -372,6 +372,10 @@ auto core_protocol::keyboards() const noexcept -> std::span<const object_id> {
     return keyboard_ids_;
 }
 
+auto core_protocol::pointers() const noexcept -> std::span<const object_id> {
+    return pointer_ids_;
+}
+
 auto core_protocol::send_keyboard_keymap(object_id id) -> result<void> {
     constexpr std::string_view keymap = "xkb_keymap {\n"
                                         "  xkb_keycodes { include \"evdev+aliases(qwerty)\" };\n"

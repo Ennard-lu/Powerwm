@@ -1028,7 +1028,58 @@ auto test_output_and_seat() -> bool {
         keyboard_offset += header->size;
         ++keyboard_events;
     }
-    return keyboard_events == 3;
+    if (keyboard_events != 3) {
+        return false;
+    }
+
+    if (!display.send_pointer_enter(5, 1.0, 2.0) || !display.send_pointer_motion(2, 3.0, 4.0) ||
+        !display.send_pointer_button(3, 0x110, true) || !display.send_pointer_axis(4, 0, 120.0) ||
+        !display.send_pointer_frame() || !server.flush()) {
+        return false;
+    }
+    std::array<std::byte, 1024> pointer_bytes{};
+    auto pointer_result = client.receive(pointer_bytes, std::span<pwm::handle_t>{});
+    if (!pointer_result) {
+        return false;
+    }
+    const std::span<const std::byte> pointer_input{pointer_bytes.data(), pointer_result->bytes};
+    pwm::usize pointer_offset = 0;
+    pwm::u32 pointer_events = 0;
+    while (pointer_offset + sizeof(wayland::message_header) <= pointer_input.size()) {
+        auto header = wayland::decode_header(pointer_input.subspan(pointer_offset));
+        if (!header || header->object != 5) {
+            return false;
+        }
+        const auto payload = pointer_input.subspan(pointer_offset + sizeof(wayland::message_header),
+                                                   header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->opcode == 0) {
+            if (!generated::wl_pointer::event_enter::decode(reader)) {
+                return false;
+            }
+        } else if (header->opcode == 2) {
+            if (!generated::wl_pointer::event_motion::decode(reader)) {
+                return false;
+            }
+        } else if (header->opcode == 3) {
+            if (!generated::wl_pointer::event_button::decode(reader)) {
+                return false;
+            }
+        } else if (header->opcode == 4) {
+            if (!generated::wl_pointer::event_axis::decode(reader)) {
+                return false;
+            }
+        } else if (header->opcode == 5) {
+            if (!generated::wl_pointer::event_frame::decode(reader)) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        pointer_offset += header->size;
+        ++pointer_events;
+    }
+    return pointer_events == 5;
 }
 
 auto test_generated_descriptors() -> bool {
