@@ -6,7 +6,7 @@
 [![CI](https://github.com/Ennard-lu/Powerwm/actions/workflows/ci.yml/badge.svg)](https://github.com/Ennard-lu/Powerwm/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status: Phase 1 (ignition) · early prototype · not usable as a daily desktop**
+**Status: Phase 1 (ignition) · implementation complete, hardware validation pending · not usable as a daily desktop**
 
 ## Why powerwm
 
@@ -49,11 +49,14 @@ The repository currently contains the Phase 0 foundation and a DRM/KMS bring-up 
 - `src/platform/event/` — poll-based multi-fd event loop, `eventfd`/`timerfd` wrappers, and page-flip/input waiting primitives.
 - `src/platform/input/` — libinput + libudev context with normalized keyboard, pointer, and touch events.
 - `src/platform/seat/` — libseat session wrapper for device access and VT enable/disable events; the DRM tool uses it when available.
+- `src/platform/udev/` — udev monitor for DRM hotplug events.
+- `src/platform/headless/` — headless output skeleton with commit/page-flip accounting.
 - `src/platform/gbm/` — early libgbm wrapper; will be evaluated after the Vulkan backend lands.
 - `src/app/main.cpp` — application skeleton; prints version/help and never touches DRM.
 - `tools/drm_bringup.cpp` — event-driven DRM/KMS demo: DRM fd, timerfd, seat dispatch, and input fd share one loop; double-buffered page flips and VT pause/resume.
 - `tools/input_probe.cpp` — five-second libinput event probe for keyboard, pointer, and touch input.
 - `tools/seat_probe.cpp` — five-second libseat session probe.
+- `tools/probe.cpp` — read-only DRM output diagnostics (`powerwm_probe`).
 - `tests/unit/` — CTest coverage for `result`, `raii`, and the multi-fd event loop.
 
 The Wayland protocol engine, Vulkan renderer, scene graph, and window manager are not
@@ -183,6 +186,7 @@ DRM device, so run it from a TTY with the required permissions:
 sudo ./build/dev/powerwm_drm_bringup
 sudo ./build/dev/powerwm_input_probe
 ./build/dev/powerwm_seat_probe
+./build/dev/powerwm_probe
 ```
 
 ## Build metadata
@@ -233,6 +237,7 @@ The design documentation is currently written in Chinese:
 - [Architecture](docs/architecture.md)
 - [Coding style](docs/coding-style.md)
 - [Testing strategy](docs/testing.md)
+- [Phase 1 validation](docs/phase-1-validation.md)
 - [CI/CD](docs/ci-cd.md)
 - [Architecture decision records](docs/decisions/)
 

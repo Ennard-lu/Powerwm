@@ -10,6 +10,7 @@
 #include <platform/event/timer_fd.hpp>
 #include <platform/input/context.hpp>
 #include <platform/seat/seat.hpp>
+#include <platform/udev/monitor.hpp>
 
 #include <cstdlib>
 #include <filesystem>
@@ -24,6 +25,7 @@ namespace drm = pwm::platform::drm;
 namespace event = pwm::platform::event;
 namespace input = pwm::platform::input;
 namespace seat = pwm::platform::seat;
+namespace udev = pwm::platform::udev;
 
 struct drm_runtime {
     pwm::raii<seat::session> session;
@@ -38,9 +40,16 @@ struct output_properties {
     drm::prop::id::plane plane;
 };
 
+enum class run_result {
+    success,
+    restart,
+    failure,
+};
+
 struct demo_state {
     drm::device* device = nullptr;
     seat::session* session = nullptr;
+    udev::monitor* udev_monitor = nullptr;
     input::context* input = nullptr;
     const drm::output_target* output = nullptr;
     const output_properties* properties = nullptr;
@@ -55,6 +64,7 @@ struct demo_state {
     bool waiting_for_flip = false;
     bool allow_modeset = true;
     bool running = true;
+    bool restart_requested = false;
     pwm::u32 frame = 0;
     pwm::u32 frame_count = 180;
     pwm::u32 waiting_ticks = 0;
@@ -306,6 +316,16 @@ auto on_drm_event(void* context, event::poll_event) -> void {
     }
 }
 
+auto on_udev_event(void* context, event::poll_event) -> void {
+    auto& state = *static_cast<demo_state*>(context);
+    if (auto device_event = state.udev_monitor->receive()) {
+        std::println("udev action={} subsystem={} devnode={}", device_event->action,
+                     device_event->subsystem, device_event->devnode);
+        state.restart_requested = true;
+        state.running = false;
+    }
+}
+
 auto on_input_event(void* context, event::poll_event) -> void {
     auto& state = *static_cast<demo_state*>(context);
     auto dispatched = state.input->dispatch();
@@ -370,7 +390,7 @@ auto on_timer(void* context, event::poll_event) -> void {
     present_frame(state);
 }
 
-auto run_drm_bringup() -> int {
+auto run_drm_bringup() -> run_result {
     auto runtime = open_drm_runtime();
     auto& device = runtime.device.value();
     seat::session* session = runtime.has_seat ? &runtime.session.value() : nullptr;
@@ -402,10 +422,21 @@ auto run_drm_bringup() -> int {
         std::println(stderr, "warning: libinput unavailable");
     }
 
+    auto udev_result = udev::monitor::create();
+    pwm::raii<udev::monitor> udev_monitor;
+    bool has_udev = false;
+    if (udev_result) {
+        udev_monitor = pwm::raii{std::move(*udev_result)};
+        has_udev = true;
+    } else {
+        std::println(stderr, "warning: udev monitor unavailable");
+    }
+
     auto timer = pwm::raii{require_value(event::timer_fd::create())};
     demo_state state{
         .device = &device,
         .session = session,
+        .udev_monitor = has_udev ? &udev_monitor.value() : nullptr,
         .input = has_input ? &input_context.value() : nullptr,
         .output = &output,
         .properties = &ids,
@@ -420,6 +451,7 @@ auto run_drm_bringup() -> int {
         .waiting_for_flip = false,
         .allow_modeset = true,
         .running = true,
+        .restart_requested = false,
         .frame = 0,
         .frame_count = 180,
         .waiting_ticks = 0,
@@ -432,6 +464,10 @@ auto run_drm_bringup() -> int {
         require_value(
             loop.add(input_context->fd(), event::poll_event::readable, on_input_event, &state));
     }
+    if (has_udev) {
+        require_value(
+            loop.add(udev_monitor->fd(), event::poll_event::readable, on_udev_event, &state));
+    }
     require_value(timer->arm_ms(16));
 
     while (state.running) {
@@ -441,11 +477,17 @@ auto run_drm_bringup() -> int {
     if (session == nullptr || session->is_enabled()) {
         require_value(device.drop_master());
     }
-    return EXIT_SUCCESS;
+    return state.restart_requested ? run_result::restart : run_result::success;
 }
 
 }
 
 int main() {
-    return run_drm_bringup();
+    while (true) {
+        const run_result result = run_drm_bringup();
+        if (result == run_result::restart) {
+            continue;
+        }
+        return result == run_result::success ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
 }

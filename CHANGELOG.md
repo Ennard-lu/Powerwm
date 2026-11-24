@@ -23,6 +23,9 @@
 - DRM 点灯工具通过 seat 打开设备，VT disable 时暂停，enable 后恢复 master 与提交。
 - 多 fd `poll` 事件循环、`eventfd`/`timerfd` 封装与事件循环单元测试。
 - DRM 点灯工具改为事件驱动：DRM fd、timerfd、seat dispatch、input fd 共用循环。
+- udev DRM 热插拔监控与输出运行时重启。
+- headless 输出骨架与单元测试。
+- `powerwm_probe` 只读输出诊断。
 - 依赖 DRM device 的资源改由 `device::create_*` 创建；统一使用 `auto foo() -> T` 函数声明风格。
 - 英文 README；中文 README 移至 `docs/README.zh-CN.md`。
 - Apache-2.0 `LICENSE` 与 SPDX 文件头。

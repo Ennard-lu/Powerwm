@@ -12,7 +12,8 @@
 | 3 | [coding-style.md](coding-style.md) | 贡献者 | 如何写出一致、可维护的 C++26 |
 | 4 | [testing.md](testing.md) | 贡献者 | 如何证明改动正确、性能是否退化 |
 | 5 | [ci-cd.md](ci-cd.md) | 维护者 | 流水线如何运行、如何发布、如何排障 |
-| 6 | [decisions/](decisions/) | 所有人 | 关键选型的背景、取舍与后果 |
+| 6 | [phase-1-validation.md](phase-1-validation.md) | 硬件验证者 | Phase 1 验收步骤与当前结果 |
+| 7 | [decisions/](decisions/) | 所有人 | 关键选型的背景、取舍与后果 |
 
 ## 文档约定
 
@@ -31,6 +32,7 @@ docs/
 ├── architecture.md        # 系统架构
 ├── coding-style.md        # 编码规范
 ├── testing.md             # 测试与性能策略
+├── phase-1-validation.md  # Phase 1 硬件验收
 ├── ci-cd.md               # 持续集成与发布
 └── decisions/
     ├── README.md          # ADR 索引与模板

@@ -28,6 +28,7 @@ add_library(powerwm_core STATIC
     src/platform/event/poll.cpp
     src/platform/event/timer_fd.cpp
     src/platform/drm/lookup.cpp
+    src/platform/headless/output.cpp
 )
 
 target_compile_options(powerwm_core PUBLIC -freflection)
@@ -54,18 +55,29 @@ target_link_libraries(powerwm_seat PUBLIC
     PkgConfig::Libseat
 )
 
+add_library(powerwm_udev STATIC
+    src/platform/udev/monitor.cpp
+)
+target_link_libraries(powerwm_udev PUBLIC
+    powerwm_core
+    PkgConfig::Libudev
+)
+
 add_executable(powerwm src/app/main.cpp)
 target_link_libraries(powerwm PRIVATE powerwm_core)
 
 if(POWERWM_BUILD_BRINGUP_TOOL)
     add_executable(powerwm_drm_bringup tools/drm_bringup.cpp)
-    target_link_libraries(powerwm_drm_bringup PRIVATE powerwm_seat powerwm_input)
+    target_link_libraries(powerwm_drm_bringup PRIVATE powerwm_seat powerwm_input powerwm_udev)
 
     add_executable(powerwm_input_probe tools/input_probe.cpp)
     target_link_libraries(powerwm_input_probe PRIVATE powerwm_input)
 
     add_executable(powerwm_seat_probe tools/seat_probe.cpp)
     target_link_libraries(powerwm_seat_probe PRIVATE powerwm_seat)
+
+    add_executable(powerwm_probe tools/probe.cpp)
+    target_link_libraries(powerwm_probe PRIVATE powerwm_core)
 endif()
 
 if(BUILD_TESTING)
@@ -76,4 +88,8 @@ if(BUILD_TESTING)
     add_executable(powerwm_event_tests tests/unit/test_event_loop.cpp)
     target_link_libraries(powerwm_event_tests PRIVATE powerwm_core)
     add_test(NAME unit.event_loop COMMAND powerwm_event_tests)
+
+    add_executable(powerwm_headless_tests tests/unit/test_headless.cpp)
+    target_link_libraries(powerwm_headless_tests PRIVATE powerwm_core)
+    add_test(NAME unit.headless COMMAND powerwm_headless_tests)
 endif()

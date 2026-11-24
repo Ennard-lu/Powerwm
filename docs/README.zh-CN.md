@@ -2,7 +2,7 @@
 
 > 一个直接运行在 Linux DRM/KMS 之上、使用现代 C++ 从零构建的 Wayland 合成器与平铺窗口管理器。
 
-**状态：Phase 1（点亮）· 早期原型 · 尚不可日常使用**
+**状态：Phase 1（点亮）· 实现完成，硬件验收待执行 · 尚不可日常使用**
 **许可证：Apache-2.0**
 
 powerwm 的目标不是再做一个配置层，而是构建一条完整、可控、可测量的图形栈：
@@ -44,11 +44,14 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `src/platform/event/`：基于 `poll` 的多 fd 事件循环、`eventfd`/`timerfd` 封装、page flip/输入等待原语。
 - `src/platform/input/`：`libinput` + `libudev` 上下文，标准化键盘/指针/触摸事件。
 - `src/platform/seat/`：`libseat` 会话封装，设备打开与 VT enable/disable 事件；DRM 工具可用时走该路径。
+- `src/platform/udev/`：DRM 热插拔 udev monitor。
+- `src/platform/headless/`：headless 输出骨架与提交/翻页计数。
 - `src/platform/gbm/`：早期 `libgbm` 封装，Vulkan 后端落地后评估移除。
 - `src/app/main.cpp`：应用骨架，无参数时打印版本与帮助，不触碰 DRM。
 - `tools/drm_bringup.cpp`：事件驱动 DRM/KMS demo，DRM fd、timerfd、seat dispatch 与 input fd 共用事件循环；双缓冲 page flip 与 VT 暂停/恢复。
 - `tools/input_probe.cpp`：5 秒输入事件探针。
 - `tools/seat_probe.cpp`：5 秒 seat 会话探针。
+- `tools/probe.cpp`：只读 DRM 输出诊断（`powerwm_probe`）。
 - CMake 目标：`powerwm_core`（静态库）、`powerwm`（应用）、`powerwm_drm_bringup`（工具）、`powerwm_tests`。
 - 当前构建已启用 `-fno-exceptions`；Vulkan 渲染栈与自研 Wayland 协议栈尚未接入，属于 Phase 2/3。
 
@@ -91,6 +94,7 @@ ctest --preset dev --output-on-failure
 sudo ./build/dev/powerwm_drm_bringup
 sudo ./build/dev/powerwm_input_probe
 ./build/dev/powerwm_seat_probe
+./build/dev/powerwm_probe
 ```
 
 ### 构建信息
@@ -229,6 +233,7 @@ flowchart TB
 | [docs/architecture.md](architecture.md) | 分层、线程模型、帧生命周期、目录规划 |
 | [docs/coding-style.md](coding-style.md) | C++26 编码规范、错误处理、并发、性能约定 |
 | [docs/testing.md](testing.md) | 测试金字塔、性能预算、模糊测试 |
+| [docs/phase-1-validation.md](phase-1-validation.md) | Phase 1 硬件验收清单与当前结果 |
 | [docs/ci-cd.md](ci-cd.md) | 流水线、分支策略、发布流程、本地复现 |
 | [docs/decisions/](decisions/) | 架构决策记录（ADR） |
 | [CHANGELOG.md](../CHANGELOG.md) | 版本变更记录 |

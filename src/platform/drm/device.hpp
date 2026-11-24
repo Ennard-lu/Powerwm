@@ -96,6 +96,10 @@ struct connector {
         return handle != nullptr;
     }
 
+    [[nodiscard]] auto id() const noexcept -> u32 {
+        return handle->connector_id;
+    }
+
     [[nodiscard]] auto is_connected() const noexcept -> bool {
         return handle->connection == DRM_MODE_CONNECTED;
     }
