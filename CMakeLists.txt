@@ -56,7 +56,7 @@ target_link_libraries(powerwm PRIVATE powerwm_core)
 
 if(POWERWM_BUILD_BRINGUP_TOOL)
     add_executable(powerwm_drm_bringup tools/drm_bringup.cpp)
-    target_link_libraries(powerwm_drm_bringup PRIVATE powerwm_core)
+    target_link_libraries(powerwm_drm_bringup PRIVATE powerwm_seat)
 
     add_executable(powerwm_input_probe tools/input_probe.cpp)
     target_link_libraries(powerwm_input_probe PRIVATE powerwm_input)

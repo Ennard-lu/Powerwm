@@ -17,6 +17,10 @@ auto device::create(const fs::path& path) noexcept -> result<device> {
     return device{fd};
 }
 
+auto device::create_borrowed(handle_t fd) noexcept -> device {
+    return device{fd, false};
+}
+
 auto device::open_first_available() noexcept -> result<device> {
     std::error_code error;
     std::filesystem::directory_iterator iterator{"/dev/dri", error};
@@ -212,7 +216,11 @@ auto device::wait_for_page_flip(i32 timeout_ms) const noexcept -> result<void> {
 }
 
 auto device::destroy() const noexcept -> void {
-    ::close(fd_handle_);
+    if (owns_fd_ && fd_handle_ >= 0) {
+        ::close(fd_handle_);
+    }
+    fd_handle_ = -1;
+    owns_fd_ = false;
 }
 
 auto dumb_buffer::map() const noexcept -> result<mapped_memory> {

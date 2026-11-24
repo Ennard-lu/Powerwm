@@ -343,7 +343,7 @@ class device {
   public:
     device() noexcept = default;
 
-    explicit device(handle_t fd) noexcept : fd_handle_(fd) {
+    explicit device(handle_t fd, bool owns_fd = true) noexcept : fd_handle_(fd), owns_fd_(owns_fd) {
     }
 
     [[nodiscard]] auto valid() const noexcept -> bool {
@@ -355,6 +355,9 @@ class device {
     }
 
     [[nodiscard]] static auto create(const fs::path& path) noexcept -> result<device>;
+
+    /// Wraps an existing fd without taking ownership. The caller must keep it open.
+    [[nodiscard]] static auto create_borrowed(handle_t fd) noexcept -> device;
 
     [[nodiscard]] static auto open_first_available() noexcept -> result<device>;
 
@@ -404,7 +407,8 @@ class device {
     auto destroy() const noexcept -> void;
 
   private:
-    handle_t fd_handle_ = -1;
+    mutable handle_t fd_handle_ = -1;
+    mutable bool owns_fd_ = true;
 };
 
 }

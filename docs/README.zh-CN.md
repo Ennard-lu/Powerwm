@@ -43,10 +43,10 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `src/platform/drm/`：`libdrm` 封装（`device`、`atomic_request`、`dumb_buffer`、`framebuffer`、属性查找、page flip）。
 - `src/platform/event/`：基于 `poll` 的事件等待，用于 page flip 与输入循环。
 - `src/platform/input/`：`libinput` + `libudev` 上下文，标准化键盘/指针/触摸事件。
-- `src/platform/seat/`：`libseat` 会话封装，设备打开与 VT enable/disable 事件。
+- `src/platform/seat/`：`libseat` 会话封装，设备打开与 VT enable/disable 事件；DRM 工具可用时走该路径。
 - `src/platform/gbm/`：早期 `libgbm` 封装，Vulkan 后端落地后评估移除。
 - `src/app/main.cpp`：应用骨架，无参数时打印版本与帮助，不触碰 DRM。
-- `tools/drm_bringup.cpp`：DRM/KMS 点灯工具，双缓冲 + page flip 动画。
+- `tools/drm_bringup.cpp`：DRM/KMS 点灯工具，双缓冲 + page flip 动画；可用时通过 libseat 打开设备，并在 VT 切换时暂停/恢复。
 - `tools/input_probe.cpp`：5 秒输入事件探针。
 - `tools/seat_probe.cpp`：5 秒 seat 会话探针。
 - CMake 目标：`powerwm_core`（静态库）、`powerwm`（应用）、`powerwm_drm_bringup`（工具）、`powerwm_tests`。

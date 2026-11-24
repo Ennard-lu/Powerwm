@@ -6,14 +6,26 @@
 #include <platform/drm/device.hpp>
 #include <platform/drm/lookup.hpp>
 #include <platform/drm/properties.hpp>
+#include <platform/seat/seat.hpp>
 
 #include <cstdlib>
+#include <filesystem>
 #include <print>
+#include <string>
+#include <system_error>
 #include <utility>
 
 namespace {
 
 namespace drm = pwm::platform::drm;
+namespace seat = pwm::platform::seat;
+
+struct drm_runtime {
+    pwm::raii<seat::session> session;
+    pwm::raii<seat::seat_device> seat_device;
+    pwm::raii<drm::device> device;
+    bool has_seat = false;
+};
 
 struct output_properties {
     drm::prop::id::crtc crtc;
@@ -37,9 +49,60 @@ auto require_value(pwm::result<T>&& value) -> T {
     return std::move(*value);
 }
 
-auto open_drm_device() -> pwm::raii<drm::device> {
-    auto device = require_value(drm::device::open_first_available());
-    return pwm::raii{std::move(device)};
+auto find_first_card_device() -> std::string {
+    std::error_code error;
+    std::filesystem::directory_iterator iterator{"/dev/dri", error};
+    if (error) {
+        return {};
+    }
+    for (const auto& entry : iterator) {
+        const std::string name = entry.path().filename().string();
+        if (name.starts_with("card")) {
+            return entry.path().string();
+        }
+    }
+    return {};
+}
+
+auto open_drm_runtime() -> drm_runtime {
+    auto session = seat::session::create();
+    if (session) {
+        auto session_handle = pwm::raii{std::move(*session)};
+        const std::string card = find_first_card_device();
+        if (!card.empty()) {
+            auto seat_device = session_handle->open_device(card);
+            if (seat_device) {
+                const pwm::handle_t fd = seat_device->fd();
+                auto device = pwm::raii{drm::device::create_borrowed(fd)};
+                return drm_runtime{
+                    .session = std::move(session_handle),
+                    .seat_device = pwm::raii{std::move(*seat_device)},
+                    .device = std::move(device),
+                    .has_seat = true,
+                };
+            }
+        }
+        std::println(stderr, "warning: libseat device open failed; using direct DRM");
+    } else {
+        std::println(stderr, "warning: libseat unavailable; using direct DRM");
+    }
+
+    auto device = pwm::raii{require_value(drm::device::open_first_available())};
+    return drm_runtime{
+        .session = {},
+        .seat_device = {},
+        .device = std::move(device),
+        .has_seat = false,
+    };
+}
+
+auto wait_until_enabled(seat::session& session) -> void {
+    for (pwm::i32 attempt = 0; attempt < 50 && !session.is_enabled(); ++attempt) {
+        require_value(session.dispatch(100));
+    }
+    if (!session.is_enabled()) {
+        pwm::terminate_with_message("seat did not become enabled");
+    }
 }
 
 auto enable_atomic_features(drm::device& device) -> void {
@@ -159,48 +222,93 @@ auto commit_frame(drm::device& device, const drm::output_target& output,
     require_value(device.commit_atomic(request.value(), flags));
 }
 
-auto render_frames(drm::device& device, const drm::output_target& output,
+auto wait_for_page_flip(drm::device& device, seat::session* session) -> pwm::result<bool> {
+    if (session == nullptr) {
+        auto result = device.wait_for_page_flip(1000);
+        if (!result) {
+            return std::unexpected(result.error());
+        }
+        return true;
+    }
+
+    constexpr pwm::i32 attempts = 20;
+    for (pwm::i32 attempt = 0; attempt < attempts; ++attempt) {
+        auto result = device.wait_for_page_flip(50);
+        if (result) {
+            return true;
+        }
+        auto dispatched = session->dispatch(0);
+        if (!dispatched) {
+            return std::unexpected(dispatched.error());
+        }
+        if (!session->is_enabled()) {
+            return false;
+        }
+    }
+    return std::unexpected(pwm::make_error(pwm::error_code::io, "page flip timed out"));
+}
+
+auto render_frames(drm::device& device, seat::session* session, const drm::output_target& output,
                    const output_properties& ids, const drm::property_blob& blob,
                    const drm::framebuffer& first, const drm::framebuffer& second,
                    drm::mapped_memory& first_memory, drm::mapped_memory& second_memory,
                    const drm::buffer_format& format) -> void {
     constexpr pwm::u32 frame_count = 180;
+    pwm::u32 frame = 0;
+    bool allow_modeset = true;
 
-    fill_animation_frame(first_memory, format, 0);
-    commit_frame(device, output, ids, first, blob, true);
-    require_value(device.wait_for_page_flip(1000));
+    while (frame < frame_count) {
+        if (session != nullptr && !session->is_enabled()) {
+            wait_until_enabled(*session);
+            require_value(device.set_master());
+            allow_modeset = true;
+        }
 
-    for (pwm::u32 frame = 0; frame < frame_count; ++frame) {
-        const bool use_first = frame % 2 != 0;
+        const bool use_first = frame % 2 == 0;
         auto& memory = use_first ? first_memory : second_memory;
         const auto& framebuffer = use_first ? first : second;
-        fill_animation_frame(memory, format, frame + 1);
-        commit_frame(device, output, ids, framebuffer, blob, false);
-        require_value(device.wait_for_page_flip(1000));
+        fill_animation_frame(memory, format, frame);
+        commit_frame(device, output, ids, framebuffer, blob, allow_modeset);
+        allow_modeset = false;
+
+        const bool completed = require_value(wait_for_page_flip(device, session));
+        if (!completed) {
+            allow_modeset = true;
+            continue;
+        }
+        ++frame;
     }
 }
 
 auto run_drm_bringup() -> int {
-    auto device = open_drm_device();
-    enable_atomic_features(device.value());
+    auto runtime = open_drm_runtime();
+    auto& device = runtime.device.value();
+    seat::session* session = runtime.has_seat ? &runtime.session.value() : nullptr;
 
-    const drm::output_target output = require_value(device->find_primary_output());
+    if (session != nullptr) {
+        wait_until_enabled(*session);
+    }
+    enable_atomic_features(device);
+
+    const drm::output_target output = require_value(device.find_primary_output());
     const drm::buffer_format format = make_buffer_format(output);
 
-    auto first_buffer = create_buffer(device.value(), format);
-    auto second_buffer = create_buffer(device.value(), format);
+    auto first_buffer = create_buffer(device, format);
+    auto second_buffer = create_buffer(device, format);
     auto first_memory = map_buffer(first_buffer.value());
     auto second_memory = map_buffer(second_buffer.value());
-    auto first_framebuffer = create_framebuffer(device.value(), first_buffer.value());
-    auto second_framebuffer = create_framebuffer(device.value(), second_buffer.value());
-    auto blob = create_mode_blob(device.value(), output.mode);
-    const output_properties ids = lookup_output_properties(device.value(), output);
+    auto first_framebuffer = create_framebuffer(device, first_buffer.value());
+    auto second_framebuffer = create_framebuffer(device, second_buffer.value());
+    auto blob = create_mode_blob(device, output.mode);
+    const output_properties ids = lookup_output_properties(device, output);
 
-    render_frames(device.value(), output, ids, blob.value(), first_framebuffer.value(),
+    render_frames(device, session, output, ids, blob.value(), first_framebuffer.value(),
                   second_framebuffer.value(), first_memory.value(), second_memory.value(),
                   first_buffer.value().format());
 
-    require_value(device->drop_master());
+    if (session == nullptr || session->is_enabled()) {
+        require_value(device.drop_master());
+    }
     return EXIT_SUCCESS;
 }
 
