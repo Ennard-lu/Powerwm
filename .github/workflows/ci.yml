@@ -81,6 +81,7 @@ jobs:
             libseat-dev \
             libudev-dev \
             libvulkan-dev \
+            glslang-tools \
             vulkan-validationlayers \
             mesa-vulkan-drivers
           rm -rf /var/lib/apt/lists/*

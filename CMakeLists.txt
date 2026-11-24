@@ -17,6 +17,27 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
 find_package(Libdrm REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(Vulkan REQUIRED)
+find_program(GLSLANG_VALIDATOR glslangValidator REQUIRED)
+
+set(POWERWM_SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/shaders")
+set(POWERWM_SHADER_BINARY_DIR "${CMAKE_BINARY_DIR}/shaders")
+file(MAKE_DIRECTORY "${POWERWM_SHADER_BINARY_DIR}")
+
+set(POWERWM_SHADER_OUTPUTS "")
+foreach(SHADER triangle.vert triangle.frag)
+    set(SHADER_INPUT "${POWERWM_SHADER_SOURCE_DIR}/${SHADER}")
+    set(SHADER_OUTPUT "${POWERWM_SHADER_BINARY_DIR}/${SHADER}.spv")
+    add_custom_command(
+        OUTPUT "${SHADER_OUTPUT}"
+        COMMAND "${GLSLANG_VALIDATOR}" -V --target-env vulkan1.3
+                -o "${SHADER_OUTPUT}" "${SHADER_INPUT}"
+        DEPENDS "${SHADER_INPUT}"
+        COMMENT "Compiling ${SHADER}"
+        VERBATIM
+    )
+    list(APPEND POWERWM_SHADER_OUTPUTS "${SHADER_OUTPUT}")
+endforeach()
+add_custom_target(powerwm_shaders DEPENDS ${POWERWM_SHADER_OUTPUTS})
 pkg_check_modules(Libinput REQUIRED IMPORTED_TARGET libinput)
 pkg_check_modules(Libudev REQUIRED IMPORTED_TARGET libudev)
 pkg_check_modules(Libseat REQUIRED IMPORTED_TARGET libseat)
@@ -64,6 +85,7 @@ add_library(powerwm_vulkanpp STATIC
     src/render/vulkanpp/image.cpp
     src/render/vulkanpp/dma_buf_image.cpp
     src/render/vulkanpp/offscreen.cpp
+    src/render/vulkanpp/triangle.cpp
 )
 target_link_libraries(powerwm_vulkanpp PUBLIC
     powerwm_core
@@ -102,6 +124,13 @@ if(POWERWM_BUILD_BRINGUP_TOOL)
 
     add_executable(powerwm_vulkan_kms_demo tools/vulkan_kms_demo.cpp)
     target_link_libraries(powerwm_vulkan_kms_demo PRIVATE powerwm_vulkanpp)
+
+    add_executable(powerwm_vulkan_pipeline_probe tools/vulkan_pipeline_probe.cpp)
+    target_link_libraries(powerwm_vulkan_pipeline_probe PRIVATE powerwm_vulkanpp)
+    target_compile_definitions(powerwm_vulkan_pipeline_probe PRIVATE
+        POWERWM_SHADER_DIR="${POWERWM_SHADER_BINARY_DIR}"
+    )
+    add_dependencies(powerwm_vulkan_pipeline_probe powerwm_shaders)
 endif()
 
 if(BUILD_TESTING)

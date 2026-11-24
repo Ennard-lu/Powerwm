@@ -114,7 +114,7 @@ resource-leak checks. See [phase-1-validation.md](phase-1-validation.md).
 - [x] DMA-BUF export and KMS framebuffer import.
 - [x] Vulkan image presented directly through KMS page flip.
 - [ ] Vulkan → KMS path integrated with the event loop and seat/VT.
-- [ ] Render pass, graphics pipeline, shader modules.
+- [x] Render pass, graphics pipeline, shader modules, fullscreen triangle.
 - [ ] Textures, transforms, clipping, rounded corners, shadows, blur.
 - [ ] Scene graph with explicit transactions.
 - [ ] Damage tracking at surface/scene/output levels.

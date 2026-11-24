@@ -90,7 +90,7 @@ powerwm/
 │   │   └── headless/         # headless output
 │   ├── render/
 │   │   ├── vulkan/           # target: compositor backend
-│   │   └── vulkanpp/         # Vulkan RAII: device/command/image/DMA-BUF
+│   │   └── vulkanpp/         # Vulkan RAII: pipeline/image/DMA-BUF/KMS
 │   ├── scene/
 │   ├── wayland/
 │   │   ├── wire/
@@ -269,6 +269,7 @@ KMS damage must be conservative: overdraw rather than miss.
 - command pool/buffer, fence, submit;
 - image, readback buffer, offscreen clear;
 - DMA-BUF export and KMS framebuffer import;
+- render pass, graphics pipeline, shader modules, fullscreen triangle;
 - all Vulkan C API stays in this layer; business code sees project types.
 
 Target renderer:

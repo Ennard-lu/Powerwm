@@ -28,7 +28,8 @@ pre-1.0 `0.x.y` convention.
 - Phase 1: DRM/KMS page flips, double buffering, libinput, libseat, udev hotplug,
   headless output, event loop, VT pause/resume.
 - Phase 2: Vulkan instance/device/queue, command pools, fences, images, readback buffers,
-  offscreen clear, DMA-BUF export, KMS framebuffer import, and direct KMS presentation.
+  offscreen clear, DMA-BUF export, KMS framebuffer import, direct KMS presentation,
+  render pass, graphics pipeline, shaders, and fullscreen-triangle readback.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
   `powerwm_input_probe`, `powerwm_seat_probe`.
 

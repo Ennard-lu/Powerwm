@@ -47,7 +47,7 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `src/platform/seat/`：`libseat` 会话封装，设备打开与 VT enable/disable 事件；DRM 工具可用时走该路径。
 - `src/platform/udev/`：DRM 热插拔 udev monitor。
 - `src/platform/headless/`：headless 输出骨架与提交/翻页计数。
-- `src/render/vulkanpp/`：Vulkan instance、逻辑设备/队列、命令池/命令缓冲、fence、图像/回读缓冲、离屏 clear 与 DMA-BUF 导出。
+- `src/render/vulkanpp/`：Vulkan instance、逻辑设备/队列、命令池/命令缓冲、fence、图像/回读缓冲、离屏 clear、DMA-BUF 导出、render pass 与 graphics pipeline。
 - `src/platform/gbm/`：早期 `libgbm` 封装，Vulkan 后端落地后评估移除。
 - `src/app/main.cpp`：应用骨架，无参数时打印版本与帮助，不触碰 DRM。
 - `tools/drm_bringup.cpp`：事件驱动 DRM/KMS demo，DRM fd、timerfd、seat dispatch 与 input fd 共用事件循环；双缓冲 page flip 与 VT 暂停/恢复。
@@ -57,6 +57,7 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `tools/vulkan_probe.cpp`：Vulkan instance/device/队列提交/离屏 clear 诊断（`powerwm_vulkan_probe`）。
 - `tools/vulkan_dmabuf_probe.cpp`：Vulkan DMA-BUF 导出与 KMS framebuffer 导入诊断。
 - `tools/vulkan_kms_demo.cpp`：Vulkan 离屏图像 → DMA-BUF → KMS page flip 演示。
+- `tools/vulkan_pipeline_probe.cpp`：Vulkan render pass / shader / fullscreen triangle 读回探针。
 - CMake 目标：`powerwm_core`（静态库）、`powerwm`（应用）、`powerwm_drm_bringup`（工具）、`powerwm_tests`。
 - 当前构建已启用 `-fno-exceptions`；Vulkan 渲染栈与自研 Wayland 协议栈尚未接入，属于 Phase 2/3。
 

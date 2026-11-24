@@ -81,7 +81,7 @@ All builds go to `build/<preset>/`. All presets use
 | `CC` / `CXX` | compiler selection |
 
 CI uses `gcc:16` and installs `libdrm-dev`, `libinput-dev`, `libseat-dev`, `libudev-dev`,
-`libvulkan-dev`, `vulkan-validationlayers`, `mesa-vulkan-drivers`. It does not install or
+`libvulkan-dev`, `glslang-tools`, `vulkan-validationlayers`, `mesa-vulkan-drivers`. It does not install or
 link libwayland.
 
 ### Build metadata

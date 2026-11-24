@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         strace \
         libdrm-dev \
         libvulkan-dev \
+        glslang-tools \
         vulkan-validationlayers \
         mesa-vulkan-drivers \
         wayland-protocols \
