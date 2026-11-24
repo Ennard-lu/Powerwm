@@ -59,6 +59,8 @@ target_link_libraries(powerwm_seat PUBLIC
 add_library(powerwm_vulkanpp STATIC
     src/render/vulkanpp/instance.cpp
     src/render/vulkanpp/device.cpp
+    src/render/vulkanpp/fence.cpp
+    src/render/vulkanpp/command_pool.cpp
 )
 target_link_libraries(powerwm_vulkanpp PUBLIC
     powerwm_core
