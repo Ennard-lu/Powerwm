@@ -59,7 +59,7 @@ Working today:
 - `powerwm_wayland_kms_compositor` displaying protocol shm surfaces through Vulkan and KMS
 - keyboard, pointer, and touch event delivery with scene hit testing
 - subcompositor, data-device-manager, xdg-output, viewporter, fractional-scale,
-  xdg-decoration, xdg-activation, and presentation-feedback protocol objects
+  xdg-decoration, xdg-activation, and page-flip presentation feedback
 - real GTK4 client connects and commits a shm window
 
 Still ahead:

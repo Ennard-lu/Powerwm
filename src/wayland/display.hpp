@@ -23,6 +23,14 @@ struct registry_global {
 
 class display_service;
 
+struct presentation_feedback_event {
+    object_id feedback = 0;
+    object_id surface = 0;
+};
+
+using presentation_feedback_callback = auto (*)(void* context,
+                                                const presentation_feedback_event& event) -> void;
+
 struct display_object {
     display_service* service = nullptr;
 
@@ -102,6 +110,15 @@ class display_service {
     auto set_surface_commit_callback(surface_commit_callback callback, void* context) noexcept
         -> void;
 
+    auto set_presentation_feedback_callback(presentation_feedback_callback callback,
+                                            void* context) noexcept -> void;
+
+    [[nodiscard]] auto request_presentation_feedback(object_id feedback, object_id surface)
+        -> result<void>;
+
+    [[nodiscard]] auto send_presentation_feedback(object_id feedback, u32 seconds_low,
+                                                  u32 nanoseconds, u32 refresh_ns) -> result<void>;
+
   private:
     friend struct display_object;
     friend struct registry_object;
@@ -110,6 +127,8 @@ class display_service {
     display_object display_;
     core_protocol core_;
     xdg_shell_protocol xdg_;
+    presentation_feedback_callback presentation_callback_ = nullptr;
+    void* presentation_context_ = nullptr;
     std::vector<std::unique_ptr<registry_object>> registries_;
     std::vector<registry_global> globals_;
     u32 next_global_name_ = 1;

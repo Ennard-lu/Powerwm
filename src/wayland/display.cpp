@@ -2,7 +2,9 @@
 
 #include <wayland/display.hpp>
 
+#include <chrono>
 #include <memory>
+#include <presentation_time_bindings.hpp>
 #include <tuple>
 #include <utility>
 #include <wayland_bindings.hpp>
@@ -342,6 +344,42 @@ auto display_service::send_touch_frame() -> result<void> {
 auto display_service::set_surface_commit_callback(surface_commit_callback callback,
                                                   void* context) noexcept -> void {
     core_.set_surface_commit_callback(callback, context);
+}
+
+auto display_service::set_presentation_feedback_callback(presentation_feedback_callback callback,
+                                                         void* context) noexcept -> void {
+    presentation_callback_ = callback;
+    presentation_context_ = context;
+}
+
+auto display_service::request_presentation_feedback(object_id feedback, object_id surface)
+    -> result<void> {
+    if (presentation_callback_ != nullptr) {
+        presentation_callback_(presentation_context_, {feedback, surface});
+        return {};
+    }
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now).count();
+    return send_presentation_feedback(feedback, static_cast<u32>(seconds), 0, 16666667);
+}
+
+auto display_service::send_presentation_feedback(object_id feedback, u32 seconds_low,
+                                                 u32 nanoseconds, u32 refresh_ns) -> result<void> {
+    generated::wp_presentation_feedback::event_presented event{};
+    std::get<0>(event.arguments) = 0;
+    std::get<1>(event.arguments) = seconds_low;
+    std::get<2>(event.arguments) = nanoseconds;
+    std::get<3>(event.arguments) = refresh_ns;
+    std::get<4>(event.arguments) = 0;
+    std::get<5>(event.arguments) = 0;
+    std::get<6>(event.arguments) = 0;
+    protocol_writer writer;
+    if (auto encoded =
+            generated::wp_presentation_feedback::event_presented::encode(writer, feedback, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return queue_event(writer);
 }
 
 auto display_service::send_callback_done(object_id callback, u32 data) -> result<void> {

@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -59,6 +60,11 @@ struct output_properties {
 struct compositor_state;
 struct client_session;
 
+struct pending_feedback {
+    pwm::u32 client = 0;
+    wayland::object_id feedback = 0;
+};
+
 struct compositor_state {
     drm::device* device = nullptr;
     seat::session* session = nullptr;
@@ -74,6 +80,7 @@ struct compositor_state {
     transport::listener* listener = nullptr;
     input::context* input = nullptr;
     std::vector<std::unique_ptr<client_session>> clients;
+    std::vector<pending_feedback> pending_presentations;
     pwm::u32 next_client = 1;
     bool session_enabled = false;
     bool waiting_for_flip = false;
@@ -102,6 +109,13 @@ struct client_session {
     wayland::display_service display;
     bool closed = false;
 };
+
+auto on_presentation_feedback(void* context, const wayland::presentation_feedback_event& feedback)
+    -> void {
+    auto& session = *static_cast<client_session*>(context);
+    session.compositor->pending_presentations.push_back(
+        {.client = session.index, .feedback = feedback.feedback});
+}
 
 auto on_client_commit(void* context, const wayland::surface_commit_event& commit) -> void {
     auto& session = *static_cast<client_session*>(context);
@@ -163,6 +177,7 @@ auto accept_client(compositor_state& state) -> void {
     session->display.advertise_core(state.output->mode.width_px(), state.output->mode.height_px(),
                                     state.output->mode.refresh_hz());
     session->display.set_surface_commit_callback(on_client_commit, session.get());
+    session->display.set_presentation_feedback_callback(on_presentation_feedback, session.get());
     if (auto added = state.loop->add(session->connection.fd(), event::poll_event::readable,
                                      on_client, session.get());
         !added) {
@@ -504,10 +519,33 @@ auto render_next_frame(compositor_state& state) -> pwm::result<void> {
     return {};
 }
 
+auto flush_presentation_feedback(compositor_state& state) -> void {
+    if (state.pending_presentations.empty()) {
+        return;
+    }
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now).count();
+    const auto nanoseconds =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(now).count() % 1000000000;
+    for (const pending_feedback& pending : state.pending_presentations) {
+        for (const auto& session : state.clients) {
+            if (session->index == pending.client && !session->closed) {
+                static_cast<void>(session->display.send_presentation_feedback(
+                    pending.feedback, static_cast<pwm::u32>(seconds),
+                    static_cast<pwm::u32>(nanoseconds), 16666667));
+                static_cast<void>(session->connection.flush());
+                break;
+            }
+        }
+    }
+    state.pending_presentations.clear();
+}
+
 auto on_page_flip(void* context) -> void {
     auto& state = *static_cast<compositor_state*>(context);
     state.waiting_for_flip = false;
     state.waiting_ticks = 0;
+    flush_presentation_feedback(state);
 }
 
 auto on_drm_event(void* context, event::poll_event) -> void {

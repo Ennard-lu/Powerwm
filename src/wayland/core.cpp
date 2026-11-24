@@ -98,27 +98,7 @@ auto presentation_object::request_destroy() -> result<void> {
 }
 
 auto presentation_object::request_feedback(object_id feedback, object_id surface) -> result<void> {
-    static_cast<void>(surface);
-    const auto now = std::chrono::system_clock::now().time_since_epoch();
-    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now).count();
-    const auto nanoseconds =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(now).count() % 1000000000;
-
-    generated::wp_presentation_feedback::event_presented event{};
-    std::get<0>(event.arguments) = 0;
-    std::get<1>(event.arguments) = static_cast<u32>(seconds);
-    std::get<2>(event.arguments) = static_cast<u32>(nanoseconds);
-    std::get<3>(event.arguments) = 16666667;
-    std::get<4>(event.arguments) = 0;
-    std::get<5>(event.arguments) = 0;
-    std::get<6>(event.arguments) = 0;
-    protocol_writer writer;
-    if (auto encoded =
-            generated::wp_presentation_feedback::event_presented::encode(writer, feedback, event);
-        !encoded) {
-        return std::unexpected(encoded.error());
-    }
-    return core->service().queue_event(writer);
+    return core->service().request_presentation_feedback(feedback, surface);
 }
 
 auto activation_token_object::request_set_serial(u32 value, object_id seat) -> result<void> {

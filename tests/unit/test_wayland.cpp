@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fractional_scale_bindings.hpp>
+#include <presentation_time_bindings.hpp>
 #include <print>
 #include <span>
 #include <string_view>
@@ -1384,6 +1385,95 @@ auto test_viewport_fractional_decoration() -> bool {
            server.objects().find(8) != nullptr;
 }
 
+auto test_presentation() -> bool {
+    namespace transport = pwm::platform::wayland;
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-presentation.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    const u32 presentation_global = display.add_global("wp_presentation", 1);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(presentation_global));
+    static_cast<void>(requests.write_string("wp_presentation"));
+    static_cast<void>(requests.write_u32(1));
+    static_cast<void>(requests.write_new_id(3));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(3, 1));
+    static_cast<void>(requests.write_new_id(4));
+    static_cast<void>(requests.write_object(100));
+    static_cast<void>(requests.end_message());
+
+    auto sent = client.send(requests.bytes(), {});
+    if (!sent || sent->bytes != requests.bytes().size()) {
+        return false;
+    }
+    if (!server.receive_available()) {
+        return false;
+    }
+    auto dispatched = server.dispatch_available();
+    if (!dispatched || *dispatched != 3 || !server.flush()) {
+        return false;
+    }
+
+    std::array<std::byte, 1024> received{};
+    auto result = client.receive(received, std::span<pwm::handle_t>{});
+    if (!result) {
+        return false;
+    }
+    const std::span<const std::byte> input{received.data(), result->bytes};
+    pwm::usize offset = 0;
+    pwm::u32 clock_events = 0;
+    pwm::u32 presented_events = 0;
+    while (offset + sizeof(wayland::message_header) <= input.size()) {
+        auto header = wayland::decode_header(input.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = input.subspan(offset + sizeof(wayland::message_header),
+                                           header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == 3 && header->opcode == 0) {
+            if (!generated::wp_presentation::event_clock_id::decode(reader)) {
+                return false;
+            }
+            ++clock_events;
+        } else if (header->object == 4 && header->opcode == 1) {
+            if (!generated::wp_presentation_feedback::event_presented::decode(reader)) {
+                return false;
+            }
+            ++presented_events;
+        } else if (header->object == 2 && header->opcode == 0) {
+            static_cast<void>(reader);
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    return clock_events == 1 && presented_events == 1;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -1434,6 +1524,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_presentation()) {
+        std::println(stderr, "presentation test failed");
         return EXIT_FAILURE;
     }
     if (!test_viewport_fractional_decoration()) {

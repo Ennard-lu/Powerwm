@@ -146,8 +146,8 @@ A GTK4 test client now connects through the KMS compositor, creates surfaces, an
 a shm window. `wl_subcompositor` and `wl_data_device_manager` object skeletons are
 available; `zxdg_output_manager_v1` provides logical output geometry and metadata for
 GTK-style clients. Viewporter, fractional scaling, xdg-decoration, xdg-activation, and
-presentation-feedback codecs are available. Full clipboard/DnD transfer is still
-pending.
+presentation feedback is deferred to the next KMS page flip. Full clipboard/DnD
+transfer is still pending.
 
 Client-id lifetime, complete clipboard/DnD, linux-dmabuf, xdg-output/viewporter,
 coroutine sessions, and broader real-client validation are the next Phase 3 steps.

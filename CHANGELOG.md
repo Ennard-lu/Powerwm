@@ -75,8 +75,8 @@ pre-1.0 `0.x.y` convention.
 - `wp_viewporter`, `wp_fractional_scale_manager_v1`,
   `zxdg_decoration_manager_v1`, and `xdg_activation_v1` protocol objects with scale and
   decoration configure events.
-- `wp_presentation`/`wp_presentation_feedback` codecs and immediate feedback for future
-  frame timing integration.
+- `wp_presentation`/`wp_presentation_feedback` with feedback deferred to the next KMS
+  page flip; GTK4 validation passes with the global advertised.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
