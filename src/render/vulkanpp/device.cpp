@@ -3,6 +3,7 @@
 #include <render/vulkanpp/device.hpp>
 
 #include <limits>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -10,6 +11,30 @@
 namespace pwm::vulkanpp {
 
 namespace {
+
+auto enumerate_extensions(VkPhysicalDevice physical_device) -> std::vector<VkExtensionProperties> {
+    u32 count = 0;
+    if (vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &count, nullptr) !=
+            VK_SUCCESS ||
+        count == 0) {
+        return {};
+    }
+    std::vector<VkExtensionProperties> extensions(count);
+    if (vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &count, extensions.data()) !=
+        VK_SUCCESS) {
+        return {};
+    }
+    return extensions;
+}
+
+auto has_extension(const std::vector<VkExtensionProperties>& extensions, const char* name) -> bool {
+    for (const auto& extension : extensions) {
+        if (std::string_view{extension.extensionName} == name) {
+            return true;
+        }
+    }
+    return false;
+}
 
 auto find_graphics_family(VkPhysicalDevice physical_device) -> u32 {
     u32 family_count = 0;
@@ -63,10 +88,32 @@ auto device::create(const instance& instance) noexcept -> result<device> {
         queue_info.queueCount = 1;
         queue_info.pQueuePriorities = &priority;
 
+        const auto extensions = enumerate_extensions(physical_device);
+        const bool has_external_memory =
+            has_extension(extensions, VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
+        const bool has_external_memory_fd =
+            has_extension(extensions, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+        const bool has_dma_buf =
+            has_extension(extensions, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+
+        std::vector<const char*> enabled_extensions;
+        if (has_external_memory) {
+            enabled_extensions.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
+        }
+        if (has_external_memory_fd) {
+            enabled_extensions.push_back(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+        }
+        if (has_dma_buf) {
+            enabled_extensions.push_back(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+        }
+
         VkDeviceCreateInfo create_info{};
         create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         create_info.queueCreateInfoCount = 1;
         create_info.pQueueCreateInfos = &queue_info;
+        create_info.enabledExtensionCount = static_cast<u32>(enabled_extensions.size());
+        create_info.ppEnabledExtensionNames =
+            enabled_extensions.empty() ? nullptr : enabled_extensions.data();
 
         VkDevice handle = VK_NULL_HANDLE;
         result = vkCreateDevice(physical_device, &create_info, nullptr, &handle);
@@ -85,7 +132,8 @@ auto device::create(const instance& instance) noexcept -> result<device> {
             .driver_version = properties.driverVersion,
             .queue_family_index = queue_family,
         };
-        return device{handle, queue, physical_device, std::move(info)};
+        return device{handle, queue, physical_device, std::move(info),
+                      has_external_memory_fd && has_dma_buf};
     }
 
     return std::unexpected(make_error(error_code::not_found, "no usable Vulkan device"));
@@ -109,6 +157,10 @@ auto device::native_queue() const noexcept -> void* {
 
 auto device::queue_family_index() const noexcept -> u32 {
     return info_.queue_family_index;
+}
+
+auto device::supports_dma_buf() const noexcept -> bool {
+    return supports_dma_buf_;
 }
 
 auto device::find_memory_type(u32 type_bits, u32 required_flags) const noexcept -> result<u32> {

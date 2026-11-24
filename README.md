@@ -41,7 +41,7 @@ Working today:
 - native DRM/KMS output with atomic modesetting and page flips
 - double-buffered animation and VT pause/resume
 - seat, input, hotplug, and event-loop foundations
-- Vulkan device, queue submission, and offscreen clear/readback foundation
+- Vulkan device, queue submission, offscreen clear/readback, and DMA-BUF export/import foundation
 - headless output and test scaffolding
 - diagnostics for DRM outputs and Vulkan devices
 

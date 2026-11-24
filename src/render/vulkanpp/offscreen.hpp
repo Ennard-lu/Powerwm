@@ -4,6 +4,7 @@
 
 #include <base/result.hpp>
 #include <base/types.hpp>
+#include <render/vulkanpp/color.hpp>
 #include <render/vulkanpp/command_pool.hpp>
 #include <render/vulkanpp/device.hpp>
 #include <render/vulkanpp/fence.hpp>
@@ -12,13 +13,6 @@
 #include <utility>
 
 namespace pwm::vulkanpp {
-
-struct color {
-    f32 red = 0.0F;
-    f32 green = 0.0F;
-    f32 blue = 0.0F;
-    f32 alpha = 1.0F;
-};
 
 class offscreen_target {
   public:

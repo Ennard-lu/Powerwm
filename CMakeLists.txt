@@ -62,6 +62,7 @@ add_library(powerwm_vulkanpp STATIC
     src/render/vulkanpp/fence.cpp
     src/render/vulkanpp/command_pool.cpp
     src/render/vulkanpp/image.cpp
+    src/render/vulkanpp/dma_buf_image.cpp
     src/render/vulkanpp/offscreen.cpp
 )
 target_link_libraries(powerwm_vulkanpp PUBLIC
@@ -95,6 +96,9 @@ if(POWERWM_BUILD_BRINGUP_TOOL)
 
     add_executable(powerwm_vulkan_probe tools/vulkan_probe.cpp)
     target_link_libraries(powerwm_vulkan_probe PRIVATE powerwm_vulkanpp)
+
+    add_executable(powerwm_vulkan_dmabuf_probe tools/vulkan_dmabuf_probe.cpp)
+    target_link_libraries(powerwm_vulkan_dmabuf_probe PRIVATE powerwm_vulkanpp)
 endif()
 
 if(BUILD_TESTING)

@@ -4,7 +4,11 @@
 
 #include <base/types.hpp>
 
+#include <drm_fourcc.h>
+
 namespace pwm::platform::drm {
+
+inline constexpr u32 format_xrgb8888 = DRM_FORMAT_XRGB8888;
 
 enum class pixel_format : u32 {
     xrgb8888,

@@ -345,6 +345,34 @@ class framebuffer {
     u32 id_ = 0;
 };
 
+class dma_buf_framebuffer {
+  public:
+    dma_buf_framebuffer() noexcept = default;
+
+    dma_buf_framebuffer(const dma_buf_framebuffer&) = delete;
+    auto operator=(const dma_buf_framebuffer&) -> dma_buf_framebuffer& = delete;
+
+    dma_buf_framebuffer(dma_buf_framebuffer&&) noexcept = default;
+    auto operator=(dma_buf_framebuffer&&) noexcept -> dma_buf_framebuffer& = default;
+
+    [[nodiscard]] auto valid() const noexcept -> bool;
+
+    [[nodiscard]] auto id() const noexcept -> u32;
+
+    auto destroy() const noexcept -> void;
+
+  private:
+    friend class device;
+
+    dma_buf_framebuffer(handle_t device_fd, u32 fb_id, u32 gem_handle) noexcept
+        : device_fd_(device_fd), fb_id_(fb_id), gem_handle_(gem_handle) {
+    }
+
+    mutable handle_t device_fd_ = -1;
+    mutable u32 fb_id_ = 0;
+    u32 gem_handle_ = 0;
+};
+
 class device {
   public:
     device() noexcept = default;
@@ -412,6 +440,12 @@ class device {
     /// Creates a framebuffer owned by this device. The device must outlive the framebuffer.
     [[nodiscard]] auto create_framebuffer(const dumb_buffer& buffer) const noexcept
         -> result<framebuffer>;
+
+    /// Imports a DMA-BUF and creates a framebuffer owned by this device.
+    [[nodiscard]] auto create_framebuffer_from_dma_buf(handle_t dma_buf_fd, u32 width_px,
+                                                       u32 height_px, u32 pitch_bytes, u32 format,
+                                                       u64 modifier) const noexcept
+        -> result<dma_buf_framebuffer>;
 
     /// Creates a property blob owned by this device. The device must outlive the blob.
     [[nodiscard]] auto create_property_blob(std::span<const std::byte> data) const noexcept

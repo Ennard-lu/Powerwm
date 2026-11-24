@@ -183,6 +183,35 @@ auto device::create_framebuffer(const dumb_buffer& buffer) const noexcept -> res
     return framebuffer{fd_handle_, id};
 }
 
+auto device::create_framebuffer_from_dma_buf(handle_t dma_buf_fd, u32 width_px, u32 height_px,
+                                             u32 pitch_bytes, u32 format,
+                                             u64 modifier) const noexcept
+    -> result<dma_buf_framebuffer> {
+    u32 gem_handle = 0;
+    if (drmPrimeFDToHandle(fd_handle_, dma_buf_fd, &gem_handle) != 0) {
+        return std::unexpected(make_error(error_code::io, "drmPrimeFDToHandle failed"));
+    }
+
+    u32 handles[1]{gem_handle};
+    u32 pitches[1]{pitch_bytes};
+    u32 offsets[1]{0};
+    u64 modifiers[1]{modifier};
+    u32 fb_id = 0;
+
+    if (drmModeAddFB2WithModifiers(fd_handle_, width_px, height_px, format, handles, pitches,
+                                   offsets, modifiers, &fb_id, DRM_MODE_FB_MODIFIERS) != 0) {
+        const i32 modifier_error = errno;
+        if (drmModeAddFB2(fd_handle_, width_px, height_px, format, handles, pitches, offsets,
+                          &fb_id, 0) == 0) {
+            return dma_buf_framebuffer{fd_handle_, fb_id, gem_handle};
+        }
+        drmCloseBufferHandle(fd_handle_, gem_handle);
+        return std::unexpected(make_error(error_code::io, "drmModeAddFB2 failed",
+                                          std::source_location::current(), modifier_error));
+    }
+    return dma_buf_framebuffer{fd_handle_, fb_id, gem_handle};
+}
+
 auto device::create_property_blob(std::span<const std::byte> data) const noexcept
     -> result<property_blob> {
     u32 id = 0;
@@ -276,6 +305,20 @@ auto property_blob::destroy() const noexcept -> void {
 
 auto framebuffer::destroy() const noexcept -> void {
     drmModeRmFB(device_fd_, id_);
+}
+
+auto dma_buf_framebuffer::valid() const noexcept -> bool {
+    return fb_id_ != 0;
+}
+
+auto dma_buf_framebuffer::id() const noexcept -> u32 {
+    return fb_id_;
+}
+
+auto dma_buf_framebuffer::destroy() const noexcept -> void {
+    drmModeRmFB(device_fd_, fb_id_);
+    drmCloseBufferHandle(device_fd_, gem_handle_);
+    fb_id_ = 0;
 }
 
 }

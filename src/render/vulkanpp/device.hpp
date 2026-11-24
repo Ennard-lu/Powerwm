@@ -45,17 +45,22 @@ class device {
     [[nodiscard]] auto find_memory_type(u32 type_bits, u32 required_flags) const noexcept
         -> result<u32>;
 
+    [[nodiscard]] auto supports_dma_buf() const noexcept -> bool;
+
     auto destroy() const noexcept -> void;
 
   private:
-    device(void* handle, void* queue, void* physical, device_info info) noexcept
-        : handle_(handle), queue_(queue), physical_(physical), info_(std::move(info)) {
+    device(void* handle, void* queue, void* physical, device_info info,
+           bool supports_dma_buf) noexcept
+        : handle_(handle), queue_(queue), physical_(physical), info_(std::move(info)),
+          supports_dma_buf_(supports_dma_buf) {
     }
 
     mutable void* handle_ = nullptr;
     mutable void* queue_ = nullptr;
     mutable void* physical_ = nullptr;
     device_info info_{};
+    bool supports_dma_buf_ = false;
 };
 
 }
