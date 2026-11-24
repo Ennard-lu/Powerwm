@@ -54,6 +54,7 @@ Working today:
 - compositor, region, surface, shm pool, and buffer protocol state with frame callbacks
 - xdg-shell role state, configure/acknowledge handshake, and popup events
 - shm buffer memory mapping and surface commit pixel callbacks
+- output and seat protocol objects with pointer/keyboard/touch creation
 
 Still ahead:
 

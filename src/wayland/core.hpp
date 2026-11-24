@@ -31,6 +31,48 @@ struct surface_commit_event {
 
 using surface_commit_callback = auto (*)(void* context, const surface_commit_event& event) -> void;
 
+struct output_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    u32 version = 1;
+
+    [[nodiscard]] auto request_release() -> result<void>;
+};
+
+struct pointer_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_set_cursor(u32 serial, object_id surface, i32 hotspot_x,
+                                          i32 hotspot_y) -> result<void>;
+    [[nodiscard]] auto request_release() -> result<void>;
+};
+
+struct keyboard_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_release() -> result<void>;
+};
+
+struct touch_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_release() -> result<void>;
+};
+
+struct seat_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    u32 version = 1;
+
+    [[nodiscard]] auto request_get_pointer(object_id pointer) -> result<void>;
+    [[nodiscard]] auto request_get_keyboard(object_id keyboard) -> result<void>;
+    [[nodiscard]] auto request_get_touch(object_id touch) -> result<void>;
+    [[nodiscard]] auto request_release() -> result<void>;
+};
+
 struct compositor_object {
     core_protocol* core = nullptr;
     object_id id = 0;
@@ -124,6 +166,11 @@ class core_protocol {
     [[nodiscard]] auto create_buffer(object_id id, object_id pool, i32 offset, i32 width,
                                      i32 height, i32 stride, u32 format) -> result<void>;
 
+    auto configure_output(u32 width, u32 height, u32 refresh_hz) noexcept -> void;
+
+    [[nodiscard]] auto create_output(object_id id, u32 version) -> result<void>;
+    [[nodiscard]] auto create_seat(object_id id, u32 version) -> result<void>;
+
     [[nodiscard]] auto surface(object_id id) noexcept -> surface_object*;
 
     [[nodiscard]] auto buffer(object_id id) noexcept -> buffer_object*;
@@ -138,7 +185,11 @@ class core_protocol {
     auto notify_commit(const surface_commit_event& event) noexcept -> void;
 
   private:
+    friend struct seat_object;
+
     [[nodiscard]] auto send_shm_formats(object_id id) -> result<void>;
+    [[nodiscard]] auto send_output_events(object_id id, u32 version) -> result<void>;
+    [[nodiscard]] auto send_seat_events(object_id id, u32 version) -> result<void>;
 
     template <typename T>
     auto store(std::vector<std::unique_ptr<T>>& objects, T object) -> T* {
@@ -155,6 +206,14 @@ class core_protocol {
     std::vector<std::unique_ptr<shm_pool_object>> pools_;
     std::vector<std::unique_ptr<shm_object>> shms_;
     std::vector<std::unique_ptr<surface_object>> surfaces_;
+    std::vector<std::unique_ptr<output_object>> outputs_;
+    std::vector<std::unique_ptr<seat_object>> seats_;
+    std::vector<std::unique_ptr<pointer_object>> pointers_;
+    std::vector<std::unique_ptr<keyboard_object>> keyboards_;
+    std::vector<std::unique_ptr<touch_object>> touches_;
+    u32 output_width_ = 1280;
+    u32 output_height_ = 720;
+    u32 output_refresh_hz_ = 60;
     surface_commit_callback commit_callback_ = nullptr;
     void* commit_context_ = nullptr;
 };

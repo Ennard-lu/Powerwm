@@ -55,6 +55,8 @@ pre-1.0 `0.x.y` convention.
   and `xdg_popup` state, configure/acknowledge flow, role metadata, and transport test.
 - Phase 3 shm: memfd mapping, buffer pixel views, `SCM_RIGHTS` pool transfer, and
   surface commit callback with validated buffer dimensions/stride/format.
+- Phase 3 output/seat: `wl_output` geometry/mode/scale/name/description events and
+  `wl_seat` pointer/keyboard/touch object creation.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
   `powerwm_input_probe`, `powerwm_seat_probe`, `powerwm_vulkan_pipeline_probe`.
 

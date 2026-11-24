@@ -24,6 +24,53 @@ auto valid_buffer_size(const shm_pool_object& pool, i32 offset, i32 width, i32 h
 
 }
 
+auto output_object::request_release() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto pointer_object::request_set_cursor(u32 serial, object_id surface, i32 hotspot_x, i32 hotspot_y)
+    -> result<void> {
+    static_cast<void>(serial);
+    static_cast<void>(surface);
+    static_cast<void>(hotspot_x);
+    static_cast<void>(hotspot_y);
+    return {};
+}
+
+auto pointer_object::request_release() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto keyboard_object::request_release() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto touch_object::request_release() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto seat_object::request_get_pointer(object_id pointer) -> result<void> {
+    auto* object = core->store(core->pointers_, pointer_object{core, pointer});
+    return add_object<pointer_object, generated::wl_pointer>(
+        core->service().connection_ref().objects(), pointer, *object);
+}
+
+auto seat_object::request_get_keyboard(object_id keyboard) -> result<void> {
+    auto* object = core->store(core->keyboards_, keyboard_object{core, keyboard});
+    return add_object<keyboard_object, generated::wl_keyboard>(
+        core->service().connection_ref().objects(), keyboard, *object);
+}
+
+auto seat_object::request_get_touch(object_id touch) -> result<void> {
+    auto* object = core->store(core->touches_, touch_object{core, touch});
+    return add_object<touch_object, generated::wl_touch>(core->service().connection_ref().objects(),
+                                                         touch, *object);
+}
+
+auto seat_object::request_release() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
 auto compositor_object::request_create_surface(object_id surface) -> result<void> {
     return core->create_surface(surface);
 }
@@ -190,6 +237,12 @@ core_protocol::core_protocol(display_service& service) noexcept : service_(&serv
 auto core_protocol::bind_global(std::string_view interface, object_id id, u32 version)
     -> result<void> {
     static_cast<void>(version);
+    if (interface == generated::wl_output::name) {
+        return create_output(id, version);
+    }
+    if (interface == generated::wl_seat::name) {
+        return create_seat(id, version);
+    }
     if (interface == generated::wl_compositor::name) {
         auto* object = store(compositors_, compositor_object{this, id});
         return add_object<compositor_object, generated::wl_compositor>(
@@ -206,6 +259,32 @@ auto core_protocol::bind_global(std::string_view interface, object_id id, u32 ve
     }
     return std::unexpected(
         make_error(error_code::unsupported, "global interface is not supported"));
+}
+
+auto core_protocol::configure_output(u32 width, u32 height, u32 refresh_hz) noexcept -> void {
+    output_width_ = width;
+    output_height_ = height;
+    output_refresh_hz_ = refresh_hz;
+}
+
+auto core_protocol::create_output(object_id id, u32 version) -> result<void> {
+    auto* object = store(outputs_, output_object{this, id, version});
+    if (auto added = add_object<output_object, generated::wl_output>(
+            service_->connection_ref().objects(), id, *object);
+        !added) {
+        return std::unexpected(added.error());
+    }
+    return send_output_events(id, version);
+}
+
+auto core_protocol::create_seat(object_id id, u32 version) -> result<void> {
+    auto* object = store(seats_, seat_object{this, id, version});
+    if (auto added = add_object<seat_object, generated::wl_seat>(
+            service_->connection_ref().objects(), id, *object);
+        !added) {
+        return std::unexpected(added.error());
+    }
+    return send_seat_events(id, version);
 }
 
 auto core_protocol::create_surface(object_id id) -> result<void> {
@@ -292,6 +371,108 @@ auto core_protocol::notify_commit(const surface_commit_event& event) noexcept ->
     if (commit_callback_ != nullptr) {
         commit_callback_(commit_context_, event);
     }
+}
+
+auto core_protocol::send_output_events(object_id id, u32 version) -> result<void> {
+    generated::wl_output::event_geometry geometry{};
+    std::get<0>(geometry.arguments) = 0;
+    std::get<1>(geometry.arguments) = 0;
+    std::get<2>(geometry.arguments) = 0;
+    std::get<3>(geometry.arguments) = 0;
+    std::get<4>(geometry.arguments) = 0;
+    std::get<5>(geometry.arguments) = "powerwm";
+    std::get<6>(geometry.arguments) = "virtual";
+    std::get<7>(geometry.arguments) = 0;
+    protocol_writer geometry_writer;
+    if (auto encoded = generated::wl_output::event_geometry::encode(geometry_writer, id, geometry);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    if (auto queued = service_->queue_event(geometry_writer); !queued) {
+        return std::unexpected(queued.error());
+    }
+
+    generated::wl_output::event_mode mode{};
+    std::get<0>(mode.arguments) = 3;
+    std::get<1>(mode.arguments) = static_cast<i32>(output_width_);
+    std::get<2>(mode.arguments) = static_cast<i32>(output_height_);
+    std::get<3>(mode.arguments) = static_cast<i32>(output_refresh_hz_ * 1000U);
+    protocol_writer mode_writer;
+    if (auto encoded = generated::wl_output::event_mode::encode(mode_writer, id, mode); !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    if (auto queued = service_->queue_event(mode_writer); !queued) {
+        return std::unexpected(queued.error());
+    }
+
+    if (version < 2) {
+        return {};
+    }
+    generated::wl_output::event_scale scale{};
+    std::get<0>(scale.arguments) = 1;
+    protocol_writer scale_writer;
+    if (auto encoded = generated::wl_output::event_scale::encode(scale_writer, id, scale);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    if (auto queued = service_->queue_event(scale_writer); !queued) {
+        return std::unexpected(queued.error());
+    }
+
+    if (version >= 4) {
+        generated::wl_output::event_name name{};
+        std::get<0>(name.arguments) = "powerwm-0";
+        protocol_writer name_writer;
+        if (auto encoded = generated::wl_output::event_name::encode(name_writer, id, name);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(name_writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+        generated::wl_output::event_description description{};
+        std::get<0>(description.arguments) = "powerwm virtual output";
+        protocol_writer description_writer;
+        if (auto encoded = generated::wl_output::event_description::encode(description_writer, id,
+                                                                           description);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(description_writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+
+    generated::wl_output::event_done done{};
+    protocol_writer done_writer;
+    if (auto encoded = generated::wl_output::event_done::encode(done_writer, id, done); !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return service_->queue_event(done_writer);
+}
+
+auto core_protocol::send_seat_events(object_id id, u32 version) -> result<void> {
+    generated::wl_seat::event_capabilities capabilities{};
+    std::get<0>(capabilities.arguments) = 3;
+    protocol_writer capabilities_writer;
+    if (auto encoded =
+            generated::wl_seat::event_capabilities::encode(capabilities_writer, id, capabilities);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    if (auto queued = service_->queue_event(capabilities_writer); !queued) {
+        return std::unexpected(queued.error());
+    }
+    if (version < 2) {
+        return {};
+    }
+    generated::wl_seat::event_name name{};
+    std::get<0>(name.arguments) = "seat0";
+    protocol_writer name_writer;
+    if (auto encoded = generated::wl_seat::event_name::encode(name_writer, id, name); !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return service_->queue_event(name_writer);
 }
 
 auto core_protocol::send_shm_formats(object_id id) -> result<void> {

@@ -825,6 +825,158 @@ auto test_shm_commit() -> bool {
            capture.pixels[1] == std::byte{1} && capture.pixels[255] == std::byte{255};
 }
 
+auto test_output_and_seat() -> bool {
+    namespace transport = pwm::platform::wayland;
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-seat.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    const u32 output_global = display.add_global("wl_output", 4);
+    const u32 seat_global = display.add_global("wl_seat", 2);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(output_global));
+    static_cast<void>(requests.write_string("wl_output"));
+    static_cast<void>(requests.write_u32(4));
+    static_cast<void>(requests.write_new_id(3));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(seat_global));
+    static_cast<void>(requests.write_string("wl_seat"));
+    static_cast<void>(requests.write_u32(2));
+    static_cast<void>(requests.write_new_id(4));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 0));
+    static_cast<void>(requests.write_new_id(5));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 1));
+    static_cast<void>(requests.write_new_id(6));
+    static_cast<void>(requests.end_message());
+
+    auto sent = client.send(requests.bytes(), {});
+    if (!sent || sent->bytes != requests.bytes().size()) {
+        return false;
+    }
+    if (!server.receive_available()) {
+        return false;
+    }
+    auto dispatched = server.dispatch_available();
+    if (!dispatched || *dispatched != 5) {
+        return false;
+    }
+    if (!server.flush()) {
+        return false;
+    }
+
+    std::array<std::byte, 4096> received{};
+    std::vector<std::byte> input;
+    for (pwm::i32 attempt = 0; attempt < 100; ++attempt) {
+        auto result = client.receive(received, std::span<pwm::handle_t>{});
+        if (!result) {
+            return false;
+        }
+        input.insert(input.end(), received.begin(), received.begin() + result->bytes);
+        if (result->would_block || result->closed || !input.empty()) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+
+    pwm::u32 output_events = 0;
+    pwm::u32 seat_events = 0;
+    pwm::usize offset = 0;
+    while (offset + sizeof(wayland::message_header) <= input.size()) {
+        auto header = wayland::decode_header(std::span<const std::byte>{input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == 3) {
+            switch (header->opcode) {
+            case 0:
+                if (!generated::wl_output::event_geometry::decode(reader)) {
+                    return false;
+                }
+                break;
+            case 1:
+                if (!generated::wl_output::event_mode::decode(reader)) {
+                    return false;
+                }
+                break;
+            case 2:
+                if (!generated::wl_output::event_done::decode(reader)) {
+                    return false;
+                }
+                break;
+            case 3:
+                if (!generated::wl_output::event_scale::decode(reader)) {
+                    return false;
+                }
+                break;
+            case 4:
+                if (!generated::wl_output::event_name::decode(reader)) {
+                    return false;
+                }
+                break;
+            case 5:
+                if (!generated::wl_output::event_description::decode(reader)) {
+                    return false;
+                }
+                break;
+            default:
+                return false;
+            }
+            ++output_events;
+        } else if (header->object == 4) {
+            if (header->opcode == 0) {
+                if (!generated::wl_seat::event_capabilities::decode(reader)) {
+                    return false;
+                }
+            } else if (header->opcode == 1) {
+                if (!generated::wl_seat::event_name::decode(reader)) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+            ++seat_events;
+        } else if (header->object == 2 && header->opcode == 0) {
+            if (!generated::wl_registry::event_global::decode(reader)) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    return output_events == 6 && seat_events == 2 && server.objects().find(5) != nullptr &&
+           server.objects().find(6) != nullptr;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -875,6 +1027,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_output_and_seat()) {
+        std::println(stderr, "output/seat test failed");
         return EXIT_FAILURE;
     }
     if (!test_shm_commit()) {

@@ -164,7 +164,8 @@ libwayland.
   `xdg_popup` state with configure/ack_configure;
 - [x] shm buffer mmap and surface commit pixel callback;
 - [ ] Vulkan texture upload and surface scene rendering;
-- [ ] seat and output objects;
+- [x] `wl_output` geometry/mode/scale/name/description events and `wl_seat`
+  pointer/keyboard/touch object creation;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [ ] real external client handshake and wire fuzzing.

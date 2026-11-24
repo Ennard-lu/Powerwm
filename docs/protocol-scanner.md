@@ -123,6 +123,8 @@ messages from the byte stream and routes them through the object table.
   track protocol state, damage, commit, and frame callbacks;
 - `xdg_wm_base`, `xdg_positioner`, `xdg_surface`, `xdg_toplevel`, and `xdg_popup`
   track role state, titles, app ids, geometry, configure serials, and popup events;
+- `wl_output` emits geometry, mode, scale, name, description, and done;
+- `wl_seat` emits capabilities/name and creates pointer, keyboard, and touch objects;
 - shm pools are mmap'd; surface commit invokes a pixel callback with the current buffer
   view, ready for texture upload;
 - Vulkan texture upload and scene rendering are the next integration step.

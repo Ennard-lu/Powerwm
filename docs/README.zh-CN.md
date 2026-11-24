@@ -49,7 +49,7 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `src/platform/headless/`：headless 输出骨架与提交/翻页计数。
 - `src/render/vulkanpp/`：Vulkan instance、逻辑设备/队列、命令池/命令缓冲、fence、图像/回读缓冲、纹理上传、DMA-BUF 导出与格式/modifier 协商、场景渲染器（圆角、阴影、模糊、变换、裁剪、damage 局部重绘）。
 - `src/scene/`：节点树、样式、父子裁剪、事务与 surface/scene/output damage 合并。
-- `src/wayland/`：XML 解析、协议模型、wire 消息读写、生成 binding、反射请求分发、对象表、socket 连接、`wl_display`/`wl_registry`、基础 compositor/surface/shm 对象、shm 内存映射、surface commit 像素回调以及 xdg-shell 角色状态。
+- `src/wayland/`：XML 解析、协议模型、wire 消息读写、生成 binding、反射请求分发、对象表、socket 连接、`wl_display`/`wl_registry`、基础 compositor/surface/shm 对象、shm 内存映射、surface commit 像素回调、xdg-shell 角色状态以及 output/seat 对象。
 - `protocols/`：随仓库维护的 `wayland.xml` 与 `xdg-shell.xml`，构建时由 scanner 生成 C++ binding。
 - `src/platform/gbm/`：早期 `libgbm` 封装，Vulkan 后端落地后评估移除。
 - `src/app/main.cpp`：应用骨架，无参数时打印版本与帮助，不触碰 DRM。
