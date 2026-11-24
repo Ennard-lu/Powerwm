@@ -65,6 +65,7 @@ pre-1.0 `0.x.y` convention.
   KMS compositor.
 - Pointer enter/leave/motion/button/axis/frame events, scene hit testing, and libinput
   pointer forwarding.
+- Touch down/up/motion/frame events and libinput touch forwarding.
 - Surface-scene bridge: shm commits upload strided BGRA/RGBA textures into scene nodes
   and render through the Vulkan scene renderer.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

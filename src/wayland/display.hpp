@@ -88,6 +88,15 @@ class display_service {
 
     [[nodiscard]] auto send_pointer_frame() -> result<void>;
 
+    [[nodiscard]] auto send_touch_down(object_id surface, u32 time_ms, i32 id, f64 x, f64 y)
+        -> result<void>;
+
+    [[nodiscard]] auto send_touch_up(u32 time_ms, i32 id) -> result<void>;
+
+    [[nodiscard]] auto send_touch_motion(u32 time_ms, i32 id, f64 x, f64 y) -> result<void>;
+
+    [[nodiscard]] auto send_touch_frame() -> result<void>;
+
     auto set_surface_commit_callback(surface_commit_callback callback, void* context) noexcept
         -> void;
 

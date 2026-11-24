@@ -74,8 +74,12 @@ auto seat_object::request_get_keyboard(object_id keyboard) -> result<void> {
 
 auto seat_object::request_get_touch(object_id touch) -> result<void> {
     auto* object = core->store(core->touches_, touch_object{core, touch});
-    return add_object<touch_object, generated::wl_touch>(core->service().connection_ref().objects(),
-                                                         touch, *object);
+    auto added = add_object<touch_object, generated::wl_touch>(
+        core->service().connection_ref().objects(), touch, *object);
+    if (added) {
+        core->touch_ids_.push_back(touch);
+    }
+    return added;
 }
 
 auto seat_object::request_release() -> result<void> {
@@ -374,6 +378,10 @@ auto core_protocol::keyboards() const noexcept -> std::span<const object_id> {
 
 auto core_protocol::pointers() const noexcept -> std::span<const object_id> {
     return pointer_ids_;
+}
+
+auto core_protocol::touches() const noexcept -> std::span<const object_id> {
+    return touch_ids_;
 }
 
 auto core_protocol::send_keyboard_keymap(object_id id) -> result<void> {

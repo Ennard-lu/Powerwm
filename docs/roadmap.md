@@ -168,6 +168,7 @@ libwayland.
   pointer/keyboard/touch object creation;
 - [x] keyboard keymap, enter, key, and modifier event delivery;
 - [x] pointer enter, leave, motion, button, axis, and frame delivery;
+- [x] touch down, up, motion, and frame delivery;
 - [x] protocol surfaces uploaded to Vulkan textures and presented through KMS;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;

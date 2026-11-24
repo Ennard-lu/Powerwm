@@ -258,6 +258,79 @@ auto display_service::send_pointer_frame() -> result<void> {
     return {};
 }
 
+auto display_service::send_touch_down(object_id surface, u32 time_ms, i32 id, f64 x, f64 y)
+    -> result<void> {
+    for (const object_id touch : core_.touches()) {
+        generated::wl_touch::event_down event{};
+        std::get<0>(event.arguments) = next_serial();
+        std::get<1>(event.arguments) = time_ms;
+        std::get<2>(event.arguments) = surface;
+        std::get<3>(event.arguments) = id;
+        std::get<4>(event.arguments) = x;
+        std::get<5>(event.arguments) = y;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_touch::event_down::encode(writer, touch, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto display_service::send_touch_up(u32 time_ms, i32 id) -> result<void> {
+    for (const object_id touch : core_.touches()) {
+        generated::wl_touch::event_up event{};
+        std::get<0>(event.arguments) = next_serial();
+        std::get<1>(event.arguments) = time_ms;
+        std::get<2>(event.arguments) = id;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_touch::event_up::encode(writer, touch, event); !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto display_service::send_touch_motion(u32 time_ms, i32 id, f64 x, f64 y) -> result<void> {
+    for (const object_id touch : core_.touches()) {
+        generated::wl_touch::event_motion event{};
+        std::get<0>(event.arguments) = time_ms;
+        std::get<1>(event.arguments) = id;
+        std::get<2>(event.arguments) = x;
+        std::get<3>(event.arguments) = y;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_touch::event_motion::encode(writer, touch, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto display_service::send_touch_frame() -> result<void> {
+    for (const object_id touch : core_.touches()) {
+        generated::wl_touch::event_frame event{};
+        protocol_writer writer;
+        if (auto encoded = generated::wl_touch::event_frame::encode(writer, touch, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
 auto display_service::set_surface_commit_callback(surface_commit_callback callback,
                                                   void* context) noexcept -> void {
     core_.set_surface_commit_callback(callback, context);

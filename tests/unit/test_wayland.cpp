@@ -873,6 +873,9 @@ auto test_output_and_seat() -> bool {
     static_cast<void>(requests.begin_message(4, 1));
     static_cast<void>(requests.write_new_id(6));
     static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 2));
+    static_cast<void>(requests.write_new_id(7));
+    static_cast<void>(requests.end_message());
 
     auto sent = client.send(requests.bytes(), {});
     if (!sent || sent->bytes != requests.bytes().size()) {
@@ -882,7 +885,7 @@ auto test_output_and_seat() -> bool {
         return false;
     }
     auto dispatched = server.dispatch_available();
-    if (!dispatched || *dispatched != 5) {
+    if (!dispatched || *dispatched != 6) {
         return false;
     }
     if (!server.flush()) {
@@ -985,7 +988,10 @@ auto test_output_and_seat() -> bool {
         offset += header->size;
     }
     if (output_events != 6 || seat_events != 2 || server.objects().find(5) == nullptr ||
-        server.objects().find(6) == nullptr) {
+        server.objects().find(6) == nullptr || server.objects().find(7) == nullptr) {
+        std::println(stderr, "seat phase2 output={} seat={} p={} k={} t={}", output_events,
+                     seat_events, server.objects().find(5) != nullptr,
+                     server.objects().find(6) != nullptr, server.objects().find(7) != nullptr);
         return false;
     }
 
@@ -1079,7 +1085,52 @@ auto test_output_and_seat() -> bool {
         pointer_offset += header->size;
         ++pointer_events;
     }
-    return pointer_events == 5;
+    if (pointer_events != 5) {
+        return false;
+    }
+    if (!display.send_touch_down(7, 5, 0, 1.0, 2.0) || !display.send_touch_motion(6, 0, 3.0, 4.0) ||
+        !display.send_touch_up(7, 0) || !display.send_touch_frame() || !server.flush()) {
+        return false;
+    }
+    std::array<std::byte, 1024> touch_bytes{};
+    auto touch_result = client.receive(touch_bytes, std::span<pwm::handle_t>{});
+    if (!touch_result) {
+        return false;
+    }
+    const std::span<const std::byte> touch_input{touch_bytes.data(), touch_result->bytes};
+    pwm::usize touch_offset = 0;
+    pwm::u32 touch_events = 0;
+    while (touch_offset + sizeof(wayland::message_header) <= touch_input.size()) {
+        auto header = wayland::decode_header(touch_input.subspan(touch_offset));
+        if (!header || header->object != 7) {
+            return false;
+        }
+        const auto payload = touch_input.subspan(touch_offset + sizeof(wayland::message_header),
+                                                 header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->opcode == 0) {
+            if (!generated::wl_touch::event_down::decode(reader)) {
+                return false;
+            }
+        } else if (header->opcode == 1) {
+            if (!generated::wl_touch::event_up::decode(reader)) {
+                return false;
+            }
+        } else if (header->opcode == 2) {
+            if (!generated::wl_touch::event_motion::decode(reader)) {
+                return false;
+            }
+        } else if (header->opcode == 3) {
+            if (!generated::wl_touch::event_frame::decode(reader)) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        touch_offset += header->size;
+        ++touch_events;
+    }
+    return touch_events == 4;
 }
 
 auto test_generated_descriptors() -> bool {

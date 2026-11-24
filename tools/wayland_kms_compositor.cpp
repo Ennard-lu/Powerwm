@@ -82,6 +82,7 @@ struct compositor_state {
     pwm::f64 cursor_x = 0.0;
     pwm::f64 cursor_y = 0.0;
     pwm::u64 pointer_focus = 0;
+    std::array<pwm::u64, 32> touch_focus{};
     pwm::u32 frame = 0;
     pwm::u32 frame_count = 180;
     pwm::u32 waiting_ticks = 0;
@@ -255,6 +256,48 @@ auto on_input_event(void* context, event::poll_event) -> void {
                     input_event->time_ms, input_event->axis, input_event->axis_value));
                 static_cast<void>(client->display.send_pointer_frame());
                 static_cast<void>(client->connection.flush());
+            }
+        } else if (input_event->type == input::input_event_type::touch_down) {
+            const auto hit = state.scene->hit_test(input_event->x, input_event->y);
+            if (hit && input_event->touch_slot < state.touch_focus.size()) {
+                state.touch_focus[input_event->touch_slot] = *hit;
+                auto* client = find_client(state, static_cast<pwm::u32>(*hit >> 32U));
+                const auto bounds = state.scene->surface_bounds(*hit);
+                if (client != nullptr && bounds) {
+                    static_cast<void>(client->display.send_touch_down(
+                        static_cast<wayland::object_id>(*hit), input_event->time_ms,
+                        static_cast<pwm::i32>(input_event->touch_slot), input_event->x - bounds->x,
+                        input_event->y - bounds->y));
+                    static_cast<void>(client->display.send_touch_frame());
+                    static_cast<void>(client->connection.flush());
+                }
+            }
+        } else if (input_event->type == input::input_event_type::touch_motion &&
+                   input_event->touch_slot < state.touch_focus.size()) {
+            const pwm::u64 focus = state.touch_focus[input_event->touch_slot];
+            if (focus != 0) {
+                auto* client = find_client(state, static_cast<pwm::u32>(focus >> 32U));
+                const auto bounds = state.scene->surface_bounds(focus);
+                if (client != nullptr && bounds) {
+                    static_cast<void>(client->display.send_touch_motion(
+                        input_event->time_ms, static_cast<pwm::i32>(input_event->touch_slot),
+                        input_event->x - bounds->x, input_event->y - bounds->y));
+                    static_cast<void>(client->display.send_touch_frame());
+                    static_cast<void>(client->connection.flush());
+                }
+            }
+        } else if (input_event->type == input::input_event_type::touch_up &&
+                   input_event->touch_slot < state.touch_focus.size()) {
+            const pwm::u64 focus = state.touch_focus[input_event->touch_slot];
+            state.touch_focus[input_event->touch_slot] = 0;
+            if (focus != 0) {
+                auto* client = find_client(state, static_cast<pwm::u32>(focus >> 32U));
+                if (client != nullptr) {
+                    static_cast<void>(client->display.send_touch_up(
+                        input_event->time_ms, static_cast<pwm::i32>(input_event->touch_slot)));
+                    static_cast<void>(client->display.send_touch_frame());
+                    static_cast<void>(client->connection.flush());
+                }
             }
         }
     }
