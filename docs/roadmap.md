@@ -172,8 +172,10 @@ libwayland.
 - [x] protocol surfaces uploaded to Vulkan textures and presented through KMS;
 - [x] `wl_subcompositor` and `wl_data_device_manager` object skeletons;
 - [x] `zxdg_output_manager_v1`/`zxdg_output_v1` logical geometry and output metadata;
-- [x] `wp_viewporter`, `wp_fractional_scale_v1`, and `zxdg_decoration_manager_v1`
-  protocol objects;
+- [x] `wp_viewporter`, `wp_fractional_scale_v1`, `zxdg_decoration_manager_v1`, and
+  `xdg_activation_v1` protocol objects;
+- [x] `wp_presentation`/`wp_presentation_feedback` codecs and immediate feedback
+  (not advertised by the KMS compositor until GTK compatibility is resolved);
 - [x] GTK4 Wayland client connects and commits a shm window;
 - [ ] complete clipboard/DnD data transfer;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;

@@ -32,6 +32,42 @@ struct surface_commit_event {
 
 using surface_commit_callback = auto (*)(void* context, const surface_commit_event& event) -> void;
 
+struct presentation_feedback_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+};
+
+struct presentation_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_feedback(object_id feedback, object_id surface) -> result<void>;
+};
+
+struct activation_token_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    u32 serial = 0;
+    object_id surface = 0;
+    std::string app_id;
+
+    [[nodiscard]] auto request_set_serial(u32 serial, object_id seat) -> result<void>;
+    [[nodiscard]] auto request_set_app_id(std::string_view app_id) -> result<void>;
+    [[nodiscard]] auto request_set_surface(object_id surface) -> result<void>;
+    [[nodiscard]] auto request_commit() -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+};
+
+struct activation_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_get_activation_token(object_id token) -> result<void>;
+    [[nodiscard]] auto request_activate(std::string_view token, object_id surface) -> result<void>;
+};
+
 struct viewport_object {
     core_protocol* core = nullptr;
     object_id id = 0;
@@ -338,6 +374,8 @@ class core_protocol {
     friend struct subcompositor_object;
     friend struct xdg_output_manager_object;
     friend struct viewporter_object;
+    friend struct presentation_object;
+    friend struct activation_object;
     friend struct fractional_scale_manager_object;
     friend struct decoration_manager_object;
     friend struct data_device_manager_object;
@@ -366,6 +404,10 @@ class core_protocol {
     std::vector<std::unique_ptr<pointer_object>> pointers_;
     std::vector<std::unique_ptr<keyboard_object>> keyboards_;
     std::vector<std::unique_ptr<touch_object>> touches_;
+    std::vector<std::unique_ptr<presentation_object>> presentations_;
+    std::vector<std::unique_ptr<presentation_feedback_object>> presentation_feedbacks_;
+    std::vector<std::unique_ptr<activation_object>> activations_;
+    std::vector<std::unique_ptr<activation_token_object>> activation_tokens_;
     std::vector<std::unique_ptr<viewporter_object>> viewporters_;
     std::vector<std::unique_ptr<viewport_object>> viewports_;
     std::vector<std::unique_ptr<fractional_scale_manager_object>> fractional_scale_managers_;

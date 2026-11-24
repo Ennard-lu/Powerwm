@@ -67,6 +67,8 @@ class display_service {
 
     [[nodiscard]] auto send_callback_done(object_id callback, u32 data) -> result<void>;
 
+    [[nodiscard]] auto send_delete_id(object_id id) -> result<void>;
+
     [[nodiscard]] auto keyboards() const noexcept -> std::span<const object_id>;
 
     [[nodiscard]] auto send_keyboard_enter(object_id surface) -> result<void>;
@@ -103,8 +105,6 @@ class display_service {
   private:
     friend struct display_object;
     friend struct registry_object;
-
-    [[nodiscard]] auto send_delete_id(object_id id) -> result<void>;
 
     connection* connection_;
     display_object display_;

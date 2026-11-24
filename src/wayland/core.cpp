@@ -4,13 +4,16 @@
 #include <wayland/display.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <fractional_scale_bindings.hpp>
+#include <presentation_time_bindings.hpp>
 #include <string_view>
 #include <tuple>
 #include <utility>
 #include <viewporter_bindings.hpp>
 #include <wayland_bindings.hpp>
+#include <xdg_activation_bindings.hpp>
 #include <xdg_decoration_bindings.hpp>
 #include <xdg_output_bindings.hpp>
 
@@ -88,6 +91,83 @@ auto seat_object::request_get_touch(object_id touch) -> result<void> {
 
 auto seat_object::request_release() -> result<void> {
     return core->service().destroy_object(id);
+}
+
+auto presentation_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto presentation_object::request_feedback(object_id feedback, object_id surface) -> result<void> {
+    static_cast<void>(surface);
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now).count();
+    const auto nanoseconds =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(now).count() % 1000000000;
+
+    generated::wp_presentation_feedback::event_presented event{};
+    std::get<0>(event.arguments) = 0;
+    std::get<1>(event.arguments) = static_cast<u32>(seconds);
+    std::get<2>(event.arguments) = static_cast<u32>(nanoseconds);
+    std::get<3>(event.arguments) = 16666667;
+    std::get<4>(event.arguments) = 0;
+    std::get<5>(event.arguments) = 0;
+    std::get<6>(event.arguments) = 0;
+    protocol_writer writer;
+    if (auto encoded =
+            generated::wp_presentation_feedback::event_presented::encode(writer, feedback, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return core->service().queue_event(writer);
+}
+
+auto activation_token_object::request_set_serial(u32 value, object_id seat) -> result<void> {
+    static_cast<void>(seat);
+    serial = value;
+    return {};
+}
+
+auto activation_token_object::request_set_app_id(std::string_view value) -> result<void> {
+    app_id = std::string{value};
+    return {};
+}
+
+auto activation_token_object::request_set_surface(object_id surface) -> result<void> {
+    this->surface = surface;
+    return {};
+}
+
+auto activation_token_object::request_commit() -> result<void> {
+    const std::string token = "powerwm-token-" + std::to_string(serial);
+    generated::xdg_activation_token_v1::event_done event{};
+    std::get<0>(event.arguments) = token;
+    protocol_writer writer;
+    if (auto encoded = generated::xdg_activation_token_v1::event_done::encode(writer, id, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return core->service().queue_event(writer);
+}
+
+auto activation_token_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto activation_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto activation_object::request_get_activation_token(object_id token) -> result<void> {
+    auto* object = core->store(core->activation_tokens_, activation_token_object{core, token});
+    return add_object<activation_token_object, generated::xdg_activation_token_v1>(
+        core->service().connection_ref().objects(), token, *object);
+}
+
+auto activation_object::request_activate(std::string_view token, object_id surface)
+    -> result<void> {
+    static_cast<void>(token);
+    static_cast<void>(surface);
+    return {};
 }
 
 auto viewport_object::request_destroy() -> result<void> {
@@ -550,6 +630,27 @@ core_protocol::core_protocol(display_service& service) noexcept : service_(&serv
 auto core_protocol::bind_global(std::string_view interface, object_id id, u32 version)
     -> result<void> {
     static_cast<void>(version);
+    if (interface == generated::wp_presentation::name) {
+        auto* object = store(presentations_, presentation_object{this, id});
+        if (auto added = add_object<presentation_object, generated::wp_presentation>(
+                service_->connection_ref().objects(), id, *object);
+            !added) {
+            return std::unexpected(added.error());
+        }
+        generated::wp_presentation::event_clock_id event{};
+        std::get<0>(event.arguments) = 0;
+        protocol_writer writer;
+        if (auto encoded = generated::wp_presentation::event_clock_id::encode(writer, id, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        return service_->queue_event(writer);
+    }
+    if (interface == generated::xdg_activation_v1::name) {
+        auto* object = store(activations_, activation_object{this, id});
+        return add_object<activation_object, generated::xdg_activation_v1>(
+            service_->connection_ref().objects(), id, *object);
+    }
     if (interface == generated::wp_viewporter::name) {
         auto* object = store(viewporters_, viewporter_object{this, id});
         return add_object<viewporter_object, generated::wp_viewporter>(

@@ -128,14 +128,19 @@ auto close_client(client_session& session) -> void {
 auto on_client(void* context, event::poll_event) -> void {
     auto& session = *static_cast<client_session*>(context);
     if (auto received = session.connection.receive_available(); !received) {
+        std::println(stderr, "client {} receive error: {}", session.index,
+                     received.error().message);
         close_client(session);
         return;
     }
     if (auto dispatched = session.connection.dispatch_available(); !dispatched) {
+        std::println(stderr, "client {} dispatch error: {}", session.index,
+                     dispatched.error().message);
         close_client(session);
         return;
     }
     if (auto flushed = session.connection.flush(); !flushed) {
+        std::println(stderr, "client {} flush error: {}", session.index, flushed.error().message);
         close_client(session);
         return;
     }
