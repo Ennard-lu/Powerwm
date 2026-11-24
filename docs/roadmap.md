@@ -116,8 +116,10 @@ resource-leak checks. See [phase-1-validation.md](phase-1-validation.md).
 - [ ] Vulkan → KMS path integrated with the event loop and seat/VT.
 - [x] Render pass, graphics pipeline, shader modules, fullscreen triangle.
 - [ ] Textures, transforms, clipping, rounded corners, shadows, blur.
-- [ ] Scene graph with explicit transactions.
-- [ ] Damage tracking at surface/scene/output levels.
+- [x] Scene node tree, transactions, and damage accumulation (foundation).
+- [ ] Scene graph rendering integration and surface nodes.
+- [x] Geometry/region damage merging and unit tests.
+- [ ] Damage tracking at surface/scene/output levels in the renderer.
 - [ ] DMA-BUF modifier negotiation and format fallback.
 - [ ] Golden-image tests and frame budgets.
 

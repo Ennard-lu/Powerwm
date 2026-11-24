@@ -44,6 +44,8 @@ pkg_check_modules(Libseat REQUIRED IMPORTED_TARGET libseat)
 
 add_library(powerwm_core STATIC
     src/base/fatal.cpp
+    src/base/geometry.cpp
+    src/scene/scene.cpp
     src/platform/drm/device.cpp
     src/platform/event/event_fd.cpp
     src/platform/event/event_loop.cpp
@@ -145,4 +147,12 @@ if(BUILD_TESTING)
     add_executable(powerwm_headless_tests tests/unit/test_headless.cpp)
     target_link_libraries(powerwm_headless_tests PRIVATE powerwm_core)
     add_test(NAME unit.headless COMMAND powerwm_headless_tests)
+
+    add_executable(powerwm_geometry_tests tests/unit/test_geometry.cpp)
+    target_link_libraries(powerwm_geometry_tests PRIVATE powerwm_core)
+    add_test(NAME unit.geometry COMMAND powerwm_geometry_tests)
+
+    add_executable(powerwm_scene_tests tests/unit/test_scene.cpp)
+    target_link_libraries(powerwm_scene_tests PRIVATE powerwm_core)
+    add_test(NAME unit.scene COMMAND powerwm_scene_tests)
 endif()

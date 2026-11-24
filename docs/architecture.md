@@ -291,6 +291,9 @@ public:
 
 ### scene/
 
+Current foundation: `node` parent/child tree, `transaction` move/show changes, and
+geometry/region damage merging. Rendering integration comes next.
+
 ```text
 output_node
 └── layer_node (background / bottom / normal / top / overlay)

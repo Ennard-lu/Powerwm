@@ -48,6 +48,7 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `src/platform/udev/`：DRM 热插拔 udev monitor。
 - `src/platform/headless/`：headless 输出骨架与提交/翻页计数。
 - `src/render/vulkanpp/`：Vulkan instance、逻辑设备/队列、命令池/命令缓冲、fence、图像/回读缓冲、离屏 clear、DMA-BUF 导出、render pass 与 graphics pipeline。
+- `src/scene/`：节点树、父子关系、事务与 damage 合并基础。
 - `src/platform/gbm/`：早期 `libgbm` 封装，Vulkan 后端落地后评估移除。
 - `src/app/main.cpp`：应用骨架，无参数时打印版本与帮助，不触碰 DRM。
 - `tools/drm_bringup.cpp`：事件驱动 DRM/KMS demo，DRM fd、timerfd、seat dispatch 与 input fd 共用事件循环；双缓冲 page flip 与 VT 暂停/恢复。
