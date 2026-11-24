@@ -26,8 +26,8 @@ jobs:
     name: Format (clang-format)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install clang-format
@@ -46,7 +46,7 @@ jobs:
     name: Policy
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check no exceptions / no libwayland / C API wrapping
         shell: bash
         run: bash tools/check_policy.sh
@@ -85,7 +85,7 @@ jobs:
             vulkan-validationlayers \
             mesa-vulkan-drivers
           rm -rf /var/lib/apt/lists/*
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
       - name: Build
