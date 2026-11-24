@@ -8,6 +8,7 @@
 #include <array>
 #include <cctype>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <print>
 #include <string>
@@ -380,9 +381,10 @@ auto write_encode(std::ofstream& output, const wayland::protocol_interface& inte
     output << "}\n\n";
 }
 
-auto write_source(std::ofstream& output, const wayland::protocol& protocol) -> void {
+auto write_source(std::ofstream& output, const wayland::protocol& protocol,
+                  std::string_view header_name) -> void {
     output << "// SPDX-License-Identifier: Apache-2.0\n\n";
-    output << "#include \"" << sanitize(protocol.name) << "_bindings.hpp\"\n\n";
+    output << "#include \"" << header_name << "\"\n\n";
     output << "namespace pwm::wayland::generated {\n\n";
     for (const auto& interface : protocol.interfaces) {
         for (const auto& message : interface.requests) {
@@ -445,7 +447,7 @@ auto generate(const char* xml_path, const std::string& header_path, const std::s
         std::println(stderr, "error: cannot create generated source");
         return EXIT_FAILURE;
     }
-    write_source(source, *protocol);
+    write_source(source, *protocol, std::filesystem::path{header_path}.filename().string());
     std::println("generated {} interfaces from {}", protocol->interfaces.size(), xml_path);
     return EXIT_SUCCESS;
 }

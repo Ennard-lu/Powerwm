@@ -107,6 +107,22 @@ list(APPEND POWERWM_PROTOCOL_OUTPUTS
     "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.hpp"
     "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.cpp")
 
+add_custom_command(
+    OUTPUT
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_output_bindings.hpp"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_output_bindings.cpp"
+    COMMAND $<TARGET_FILE:powerwm_protocol_scanner>
+        "${CMAKE_SOURCE_DIR}/protocols/xdg-output-unstable-v1.xml"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_output_bindings.hpp"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_output_bindings.cpp"
+    DEPENDS powerwm_protocol_scanner "${CMAKE_SOURCE_DIR}/protocols/xdg-output-unstable-v1.xml"
+    COMMENT "Generating xdg-output bindings"
+    VERBATIM
+)
+list(APPEND POWERWM_PROTOCOL_OUTPUTS
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_output_bindings.hpp"
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_output_bindings.cpp")
+
 add_custom_target(powerwm_protocols DEPENDS ${POWERWM_PROTOCOL_OUTPUTS})
 
 add_library(powerwm_wayland STATIC
@@ -122,6 +138,7 @@ add_library(powerwm_wayland STATIC
     src/wayland/xdg_shell.cpp
     "${POWERWM_GENERATED_PROTOCOL_DIR}/wayland_bindings.cpp"
     "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.cpp"
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_output_bindings.cpp"
 )
 target_include_directories(powerwm_wayland PUBLIC
     ${CMAKE_SOURCE_DIR}/src

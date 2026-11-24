@@ -171,6 +171,7 @@ libwayland.
 - [x] touch down, up, motion, and frame delivery;
 - [x] protocol surfaces uploaded to Vulkan textures and presented through KMS;
 - [x] `wl_subcompositor` and `wl_data_device_manager` object skeletons;
+- [x] `zxdg_output_manager_v1`/`zxdg_output_v1` logical geometry and output metadata;
 - [x] GTK4 Wayland client connects and commits a shm window;
 - [ ] complete clipboard/DnD data transfer;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;

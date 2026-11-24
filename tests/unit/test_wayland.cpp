@@ -23,6 +23,7 @@
 #include <tuple>
 #include <vector>
 #include <wayland_bindings.hpp>
+#include <xdg_output_bindings.hpp>
 #include <xdg_shell_bindings.hpp>
 
 namespace {
@@ -562,6 +563,7 @@ auto test_xdg_shell_transport() -> bool {
 
     auto sent = client.send(requests.bytes(), {});
     if (!sent || sent->bytes != requests.bytes().size()) {
+        std::println(stderr, "xdg send failed");
         return false;
     }
     if (!server.receive_available()) {
@@ -1133,6 +1135,137 @@ auto test_output_and_seat() -> bool {
     return touch_events == 4;
 }
 
+auto test_xdg_output() -> bool {
+    namespace transport = pwm::platform::wayland;
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-xdg-output.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    const u32 output_global = display.add_global("wl_output", 4);
+    const u32 manager_global = display.add_global("zxdg_output_manager_v1", 3);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(output_global));
+    static_cast<void>(requests.write_string("wl_output"));
+    static_cast<void>(requests.write_u32(4));
+    static_cast<void>(requests.write_new_id(3));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(manager_global));
+    static_cast<void>(requests.write_string("zxdg_output_manager_v1"));
+    static_cast<void>(requests.write_u32(3));
+    static_cast<void>(requests.write_new_id(4));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 1));
+    static_cast<void>(requests.write_new_id(5));
+    static_cast<void>(requests.write_object(3));
+    static_cast<void>(requests.end_message());
+
+    auto sent = client.send(requests.bytes(), {});
+    if (!sent || sent->bytes != requests.bytes().size()) {
+        return false;
+    }
+    if (!server.receive_available()) {
+        return false;
+    }
+    auto dispatched = server.dispatch_available();
+    if (!dispatched) {
+        return false;
+    }
+    if (*dispatched != 4) {
+        return false;
+    }
+    if (!server.flush()) {
+        return false;
+    }
+
+    std::array<std::byte, 4096> received{};
+    std::vector<std::byte> input;
+    for (pwm::i32 attempt = 0; attempt < 100; ++attempt) {
+        auto result = client.receive(received, std::span<pwm::handle_t>{});
+        if (!result) {
+            return false;
+        }
+        input.insert(input.end(), received.begin(), received.begin() + result->bytes);
+        if (result->would_block || result->closed || !input.empty()) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+
+    pwm::u32 xdg_events = 0;
+    pwm::usize offset = 0;
+    while (offset + sizeof(wayland::message_header) <= input.size()) {
+        auto header = wayland::decode_header(std::span<const std::byte>{input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == 5) {
+            switch (header->opcode) {
+            case 0:
+                if (!generated::zxdg_output_v1::event_logical_position::decode(reader)) {
+                    return false;
+                }
+                break;
+            case 1:
+                if (!generated::zxdg_output_v1::event_logical_size::decode(reader)) {
+                    return false;
+                }
+                break;
+            case 2:
+                if (!generated::zxdg_output_v1::event_done::decode(reader)) {
+                    return false;
+                }
+                break;
+            case 3:
+                if (!generated::zxdg_output_v1::event_name::decode(reader)) {
+                    return false;
+                }
+                break;
+            case 4:
+                if (!generated::zxdg_output_v1::event_description::decode(reader)) {
+                    return false;
+                }
+                break;
+            default:
+                return false;
+            }
+            ++xdg_events;
+        } else if ((header->object == 2 && header->opcode == 0) || header->object == 3) {
+            static_cast<void>(reader);
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    return xdg_events == 5 && server.objects().find(5) != nullptr;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -1183,6 +1316,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_xdg_output()) {
+        std::println(stderr, "xdg-output test failed");
         return EXIT_FAILURE;
     }
     if (!test_output_and_seat()) {

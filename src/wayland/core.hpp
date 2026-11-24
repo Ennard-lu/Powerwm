@@ -32,6 +32,24 @@ struct surface_commit_event {
 
 using surface_commit_callback = auto (*)(void* context, const surface_commit_event& event) -> void;
 
+struct xdg_output_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    u32 version = 1;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+};
+
+struct xdg_output_manager_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    u32 version = 1;
+
+    [[nodiscard]] auto request_get_xdg_output(object_id xdg_output, object_id output)
+        -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+};
+
 struct subsurface_object {
     core_protocol* core = nullptr;
     object_id id = 0;
@@ -264,6 +282,7 @@ class core_protocol {
   private:
     friend struct seat_object;
     friend struct subcompositor_object;
+    friend struct xdg_output_manager_object;
     friend struct data_device_manager_object;
 
     [[nodiscard]] auto send_shm_formats(object_id id) -> result<void>;
@@ -290,6 +309,8 @@ class core_protocol {
     std::vector<std::unique_ptr<pointer_object>> pointers_;
     std::vector<std::unique_ptr<keyboard_object>> keyboards_;
     std::vector<std::unique_ptr<touch_object>> touches_;
+    std::vector<std::unique_ptr<xdg_output_manager_object>> xdg_output_managers_;
+    std::vector<std::unique_ptr<xdg_output_object>> xdg_outputs_;
     std::vector<std::unique_ptr<subcompositor_object>> subcompositors_;
     std::vector<std::unique_ptr<subsurface_object>> subsurfaces_;
     std::vector<std::unique_ptr<data_device_manager_object>> data_managers_;

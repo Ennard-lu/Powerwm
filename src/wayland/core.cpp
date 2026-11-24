@@ -9,6 +9,7 @@
 #include <tuple>
 #include <utility>
 #include <wayland_bindings.hpp>
+#include <xdg_output_bindings.hpp>
 
 namespace pwm::wayland {
 
@@ -83,6 +84,85 @@ auto seat_object::request_get_touch(object_id touch) -> result<void> {
 }
 
 auto seat_object::request_release() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto xdg_output_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto xdg_output_manager_object::request_get_xdg_output(object_id xdg_output, object_id output)
+    -> result<void> {
+    static_cast<void>(output);
+    auto* object = core->store(core->xdg_outputs_, xdg_output_object{core, xdg_output, version});
+    if (auto added = add_object<xdg_output_object, generated::zxdg_output_v1>(
+            core->service().connection_ref().objects(), xdg_output, *object);
+        !added) {
+        return std::unexpected(added.error());
+    }
+
+    generated::zxdg_output_v1::event_logical_position position{};
+    std::get<0>(position.arguments) = 0;
+    std::get<1>(position.arguments) = 0;
+    protocol_writer position_writer;
+    if (auto encoded = generated::zxdg_output_v1::event_logical_position::encode(
+            position_writer, xdg_output, position);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    if (auto queued = core->service().queue_event(position_writer); !queued) {
+        return std::unexpected(queued.error());
+    }
+
+    generated::zxdg_output_v1::event_logical_size size{};
+    std::get<0>(size.arguments) = static_cast<i32>(core->output_width_);
+    std::get<1>(size.arguments) = static_cast<i32>(core->output_height_);
+    protocol_writer size_writer;
+    if (auto encoded =
+            generated::zxdg_output_v1::event_logical_size::encode(size_writer, xdg_output, size);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    if (auto queued = core->service().queue_event(size_writer); !queued) {
+        return std::unexpected(queued.error());
+    }
+
+    if (version >= 2) {
+        generated::zxdg_output_v1::event_name name{};
+        std::get<0>(name.arguments) = "powerwm-0";
+        protocol_writer name_writer;
+        if (auto encoded =
+                generated::zxdg_output_v1::event_name::encode(name_writer, xdg_output, name);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = core->service().queue_event(name_writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+        generated::zxdg_output_v1::event_description description{};
+        std::get<0>(description.arguments) = "powerwm virtual output";
+        protocol_writer description_writer;
+        if (auto encoded = generated::zxdg_output_v1::event_description::encode(
+                description_writer, xdg_output, description);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = core->service().queue_event(description_writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+        generated::zxdg_output_v1::event_done done{};
+        protocol_writer done_writer;
+        if (auto encoded =
+                generated::zxdg_output_v1::event_done::encode(done_writer, xdg_output, done);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        return core->service().queue_event(done_writer);
+    }
+    return {};
+}
+
+auto xdg_output_manager_object::request_destroy() -> result<void> {
     return core->service().destroy_object(id);
 }
 
@@ -369,6 +449,11 @@ core_protocol::core_protocol(display_service& service) noexcept : service_(&serv
 auto core_protocol::bind_global(std::string_view interface, object_id id, u32 version)
     -> result<void> {
     static_cast<void>(version);
+    if (interface == generated::zxdg_output_manager_v1::name) {
+        auto* object = store(xdg_output_managers_, xdg_output_manager_object{this, id, version});
+        return add_object<xdg_output_manager_object, generated::zxdg_output_manager_v1>(
+            service_->connection_ref().objects(), id, *object);
+    }
     if (interface == generated::wl_subcompositor::name) {
         auto* object = store(subcompositors_, subcompositor_object{this, id});
         return add_object<subcompositor_object, generated::wl_subcompositor>(

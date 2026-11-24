@@ -144,7 +144,8 @@ down/up/motion/frame events use scene hit testing.
 
 A GTK4 test client now connects through the KMS compositor, creates surfaces, and commits
 a shm window. `wl_subcompositor` and `wl_data_device_manager` object skeletons are
-available; full clipboard/DnD transfer is still pending.
+available; `zxdg_output_manager_v1` provides logical output geometry and metadata for
+GTK-style clients. Full clipboard/DnD transfer is still pending.
 
 Client-id lifetime, complete clipboard/DnD, linux-dmabuf, xdg-output/viewporter,
 coroutine sessions, and broader real-client validation are the next Phase 3 steps.
