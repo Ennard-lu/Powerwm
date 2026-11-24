@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fractional_scale_bindings.hpp>
+#include <layer_shell_bindings.hpp>
 #include <linux_dmabuf_bindings.hpp>
 #include <presentation_time_bindings.hpp>
 #include <print>
@@ -2159,6 +2160,139 @@ auto test_linux_dmabuf() -> bool {
     return server.objects().find(4) == nullptr && server.objects().find(5) == nullptr;
 }
 
+auto test_layer_shell() -> bool {
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-layer.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    const u32 compositor_global = display.add_global("wl_compositor", 4);
+    const u32 layer_global = display.add_global("zwlr_layer_shell_v1", 4);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    const auto bind_global = [&requests](u32 global, std::string_view interface, u32 version,
+                                         u32 id) {
+        static_cast<void>(requests.begin_message(2, 0));
+        static_cast<void>(requests.write_u32(global));
+        static_cast<void>(requests.write_string(interface));
+        static_cast<void>(requests.write_u32(version));
+        static_cast<void>(requests.write_new_id(id));
+        static_cast<void>(requests.end_message());
+    };
+    bind_global(compositor_global, "wl_compositor", 4, 3);
+    bind_global(layer_global, "zwlr_layer_shell_v1", 4, 4);
+    static_cast<void>(requests.begin_message(3, 0));
+    static_cast<void>(requests.write_new_id(5));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 0));
+    static_cast<void>(requests.write_new_id(6));
+    static_cast<void>(requests.write_object(5));
+    static_cast<void>(requests.write_object(0));
+    static_cast<void>(requests.write_u32(2));
+    static_cast<void>(requests.write_string("powerwm-test"));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(6, 0));
+    static_cast<void>(requests.write_u32(200));
+    static_cast<void>(requests.write_u32(60));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(6, 1));
+    static_cast<void>(requests.write_u32(5));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(6, 2));
+    static_cast<void>(requests.write_i32(50));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(6, 3));
+    static_cast<void>(requests.write_i32(4));
+    static_cast<void>(requests.write_i32(0));
+    static_cast<void>(requests.write_i32(0));
+    static_cast<void>(requests.write_i32(6));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(5, 6));
+    static_cast<void>(requests.end_message());
+
+    auto sent = client.send(requests.bytes(), requests.fds());
+    if (!sent || !server.receive_available() || !server.dispatch_available() || !server.flush()) {
+        return false;
+    }
+
+    std::array<std::byte, 1024> received{};
+    auto result = client.receive(received, std::span<pwm::handle_t>{});
+    if (!result) {
+        return false;
+    }
+    const std::span<const std::byte> input{received.data(), result->bytes};
+    pwm::u32 serial = 0;
+    pwm::u32 width = 0;
+    pwm::u32 height = 0;
+    pwm::usize offset = 0;
+    bool saw_configure = false;
+    while (offset + sizeof(wayland::message_header) <= input.size()) {
+        auto header = wayland::decode_header(input.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = input.subspan(offset + sizeof(wayland::message_header),
+                                           header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == 6 && header->opcode == 0) {
+            auto event = generated::zwlr_layer_surface_v1::event_configure::decode(reader);
+            if (!event) {
+                return false;
+            }
+            serial = std::get<0>(event->arguments);
+            width = std::get<1>(event->arguments);
+            height = std::get<2>(event->arguments);
+            saw_configure = true;
+        } else if (header->object == 2 && header->opcode == 0) {
+            static_cast<void>(reader);
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    if (!saw_configure || width != 200 || height != 60 || serial == 0) {
+        return false;
+    }
+
+    const auto geometry = display.layer_geometry(5, 1280, 720, 0, 0);
+    if (!geometry || geometry->bounds.x != 6 || geometry->bounds.y != 4 ||
+        geometry->bounds.width != 200 || geometry->bounds.height != 60 ||
+        geometry->keyboard_interactive) {
+        return false;
+    }
+
+    wayland::protocol_writer acknowledge;
+    static_cast<void>(acknowledge.begin_message(6, 6));
+    static_cast<void>(acknowledge.write_u32(serial));
+    static_cast<void>(acknowledge.end_message());
+    static_cast<void>(acknowledge.begin_message(6, 7));
+    static_cast<void>(acknowledge.end_message());
+    auto acknowledged = client.send(acknowledge.bytes(), acknowledge.fds());
+    if (!acknowledged || !server.receive_available() || !server.dispatch_available()) {
+        return false;
+    }
+    return server.objects().find(6) == nullptr;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -2209,6 +2343,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_layer_shell()) {
+        std::println(stderr, "layer shell test failed");
         return EXIT_FAILURE;
     }
     if (!test_linux_dmabuf()) {

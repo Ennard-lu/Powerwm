@@ -85,6 +85,8 @@ pre-1.0 `0.x.y` convention.
 - `linux-dmabuf-v1`: format and linear-modifier advertisement, single-plane buffer
   params, immediate and deferred buffer creation, and Vulkan DMA-BUF import for surface
   rendering.
+- `wlr-layer-shell-unstable-v1`: layer surfaces with anchors, margins, explicit sizes,
+  exclusive zones, keyboard interactivity, configure/ack, and scene placement.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

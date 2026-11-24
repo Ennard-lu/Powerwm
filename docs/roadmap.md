@@ -181,6 +181,8 @@ libwayland.
 - [x] drag-and-drop offer, enter, motion, drop, action, and finish flow;
 - [x] `linux-dmabuf-v1` format/modifier advertisement, single-plane params, buffer
   creation, and Vulkan DMA-BUF import (linear and modifier-tiled);
+- [x] `wlr-layer-shell-unstable-v1` surfaces with layer, anchor, size, margin,
+  exclusive zone, keyboard interactivity, configure, and ack;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [x] in-tree socket handshake and raw-wire client verification;

@@ -44,6 +44,7 @@ auto display_service::advertise_core(u32 output_width, u32 output_height, u32 re
     add_global("wl_seat", 2);
     add_global("wl_data_device_manager", 3);
     add_global("zwp_linux_dmabuf_v1", 3);
+    add_global("zwlr_layer_shell_v1", 4);
     add_global("xdg_wm_base", 1);
 }
 
@@ -442,6 +443,12 @@ auto display_service::create_data_offer(u32 source_client, object_id source_obje
 
 auto display_service::send_selection(object_id offer) -> result<void> {
     return core_.send_selection(offer);
+}
+
+auto display_service::layer_geometry(object_id surface, u32 output_width, u32 output_height,
+                                     i32 buffer_width, i32 buffer_height) const
+    -> std::optional<layer_surface_geometry> {
+    return core_.layer_geometry(surface, output_width, output_height, buffer_width, buffer_height);
 }
 
 auto display_service::receive_data_offer(object_id offer, u32 source_client,

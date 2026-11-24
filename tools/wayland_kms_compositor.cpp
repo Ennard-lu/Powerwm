@@ -146,7 +146,15 @@ auto on_client_commit(void* context, const wayland::surface_commit_event& commit
     }
     std::println("client {} surface {} committed {}x{}{}", session.index, commit.surface,
                  commit.width, commit.height, commit.is_dmabuf ? " dmabuf" : " shm");
-    static_cast<void>(session.display.send_keyboard_enter(commit.surface));
+    const auto layer = session.display.layer_geometry(
+        commit.surface, session.compositor->output->mode.width_px(),
+        session.compositor->output->mode.height_px(), commit.width, commit.height);
+    if (layer) {
+        static_cast<void>(session.compositor->scene->set_surface_bounds(key, layer->bounds));
+    }
+    if (!layer || layer->keyboard_interactive) {
+        static_cast<void>(session.display.send_keyboard_enter(commit.surface));
+    }
     static_cast<void>(session.connection.flush());
 }
 

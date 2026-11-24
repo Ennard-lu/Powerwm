@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstring>
 #include <fractional_scale_bindings.hpp>
+#include <layer_shell_bindings.hpp>
 #include <linux_dmabuf_bindings.hpp>
 #include <presentation_time_bindings.hpp>
 #include <string_view>
@@ -107,6 +108,85 @@ auto linux_dmabuf_object::request_get_surface_feedback(object_id feedback, objec
     static_cast<void>(surface);
     return std::unexpected(
         make_error(error_code::unsupported, "DMA-BUF feedback is not supported"));
+}
+
+auto layer_surface_object::request_set_size(u32 width, u32 height) -> result<void> {
+    this->width = width;
+    this->height = height;
+    return {};
+}
+
+auto layer_surface_object::request_set_anchor(u32 value) -> result<void> {
+    if ((value & ~0xFU) != 0) {
+        return std::unexpected(make_error(error_code::protocol, "layer anchor is invalid"));
+    }
+    anchor = value;
+    return {};
+}
+
+auto layer_surface_object::request_set_exclusive_zone(i32 zone) -> result<void> {
+    if (zone < -1) {
+        return std::unexpected(make_error(error_code::protocol, "layer exclusive zone is invalid"));
+    }
+    exclusive = zone;
+    return {};
+}
+
+auto layer_surface_object::request_set_margin(i32 top, i32 right, i32 bottom, i32 left)
+    -> result<void> {
+    margin_top = top;
+    margin_right = right;
+    margin_bottom = bottom;
+    margin_left = left;
+    return {};
+}
+
+auto layer_surface_object::request_set_keyboard_interactivity(u32 value) -> result<void> {
+    if (value > 2) {
+        return std::unexpected(
+            make_error(error_code::protocol, "layer keyboard interactivity is invalid"));
+    }
+    keyboard = value;
+    return {};
+}
+
+auto layer_surface_object::request_get_popup(object_id popup) -> result<void> {
+    static_cast<void>(popup);
+    return {};
+}
+
+auto layer_surface_object::request_ack_configure(u32 serial) -> result<void> {
+    if (!configured || serial != configure_serial) {
+        return std::unexpected(
+            make_error(error_code::protocol, "layer configure serial is unknown"));
+    }
+    return {};
+}
+
+auto layer_surface_object::request_destroy() -> result<void> {
+    surface = 0;
+    return core->service().destroy_object(id);
+}
+
+auto layer_surface_object::request_set_layer(u32 value) -> result<void> {
+    if (value > 3) {
+        return std::unexpected(make_error(error_code::protocol, "layer value is invalid"));
+    }
+    layer = value;
+    return {};
+}
+
+auto layer_shell_object::request_get_layer_surface(object_id layer_surface, object_id surface,
+                                                   object_id output, u32 layer,
+                                                   std::string_view space) -> result<void> {
+    if (layer > 3) {
+        return std::unexpected(make_error(error_code::protocol, "layer value is invalid"));
+    }
+    return core->create_layer_surface(layer_surface, surface, output, layer, space);
+}
+
+auto layer_shell_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
 }
 
 auto output_object::request_release() -> result<void> {
@@ -644,6 +724,9 @@ auto surface_object::request_set_input_region(object_id region) -> result<void> 
 }
 
 auto surface_object::request_commit() -> result<void> {
+    if (auto configured = core->configure_layer_surface(id); !configured) {
+        return std::unexpected(configured.error());
+    }
     surface_commit_event event{.surface = id, .buffer = buffer};
     if (buffer != 0) {
         const buffer_object* committed = core->buffer(buffer);
@@ -761,6 +844,9 @@ auto core_protocol::bind_global(std::string_view interface, object_id id, u32 ve
         auto* object = store(subcompositors_, subcompositor_object{this, id});
         return add_object<subcompositor_object, generated::wl_subcompositor>(
             service_->connection_ref().objects(), id, *object);
+    }
+    if (interface == generated::zwlr_layer_shell_v1::name) {
+        return create_layer_shell(id, version);
     }
     if (interface == generated::zwp_linux_dmabuf_v1::name) {
         auto* object = store(linux_dmabufs_, linux_dmabuf_object{this, id, version});
@@ -883,6 +969,106 @@ auto core_protocol::create_pool(object_id id, handle_t fd, i32 size) -> result<v
 
 auto core_protocol::allocate_server_object_id() noexcept -> object_id {
     return next_server_id_++;
+}
+
+auto core_protocol::create_layer_shell(object_id id, u32 version) -> result<void> {
+    auto* object = store(layer_shells_, layer_shell_object{this, id, version});
+    return add_object<layer_shell_object, generated::zwlr_layer_shell_v1>(
+        service_->connection_ref().objects(), id, *object);
+}
+
+auto core_protocol::create_layer_surface(object_id id, object_id surface, object_id output,
+                                         u32 layer, std::string_view space) -> result<void> {
+    if (surface == 0 || this->surface(surface) == nullptr) {
+        return std::unexpected(make_error(error_code::protocol, "layer surface is unknown"));
+    }
+    for (const auto& existing : layer_surfaces_) {
+        if (existing->surface == surface) {
+            return std::unexpected(
+                make_error(error_code::protocol, "surface already has a layer role"));
+        }
+    }
+    auto* object = store(layer_surfaces_, layer_surface_object{.core = this,
+                                                               .id = id,
+                                                               .surface = surface,
+                                                               .output = output,
+                                                               .layer = layer,
+                                                               .space = std::string{space}});
+    return add_object<layer_surface_object, generated::zwlr_layer_surface_v1>(
+        service_->connection_ref().objects(), id, *object);
+}
+
+auto core_protocol::layer_geometry(object_id surface, u32 output_width, u32 output_height,
+                                   i32 buffer_width, i32 buffer_height) const
+    -> std::optional<layer_surface_geometry> {
+    constexpr u32 anchor_top = 1;
+    constexpr u32 anchor_bottom = 2;
+    constexpr u32 anchor_left = 4;
+    constexpr u32 anchor_right = 8;
+    for (const auto& layer : layer_surfaces_) {
+        if (layer->surface != surface || layer->surface == 0) {
+            continue;
+        }
+        const bool left = (layer->anchor & anchor_left) != 0;
+        const bool right = (layer->anchor & anchor_right) != 0;
+        const bool top = (layer->anchor & anchor_top) != 0;
+        const bool bottom = (layer->anchor & anchor_bottom) != 0;
+        i32 width = layer->width != 0 ? static_cast<i32>(layer->width) : buffer_width;
+        i32 height = layer->height != 0 ? static_cast<i32>(layer->height) : buffer_height;
+        if (layer->width == 0 && left && right) {
+            width = static_cast<i32>(output_width) - layer->margin_left - layer->margin_right;
+        }
+        if (layer->height == 0 && top && bottom) {
+            height = static_cast<i32>(output_height) - layer->margin_top - layer->margin_bottom;
+        }
+        width = std::max(1, width);
+        height = std::max(1, height);
+        i32 x = (static_cast<i32>(output_width) - width) / 2;
+        i32 y = (static_cast<i32>(output_height) - height) / 2;
+        if (left) {
+            x = layer->margin_left;
+        } else if (right) {
+            x = static_cast<i32>(output_width) - width - layer->margin_right;
+        }
+        if (top) {
+            y = layer->margin_top;
+        } else if (bottom) {
+            y = static_cast<i32>(output_height) - height - layer->margin_bottom;
+        }
+        return layer_surface_geometry{
+            .bounds = {x, y, width, height},
+            .layer = layer->layer,
+            .exclusive = layer->exclusive,
+            .keyboard_interactive = layer->keyboard != 0,
+        };
+    }
+    return std::nullopt;
+}
+
+auto core_protocol::configure_layer_surface(object_id surface) -> result<void> {
+    for (const auto& layer : layer_surfaces_) {
+        if (layer->surface != surface || layer->configured) {
+            continue;
+        }
+        generated::zwlr_layer_surface_v1::event_configure event{};
+        const u32 serial = service_->next_serial();
+        std::get<0>(event.arguments) = serial;
+        std::get<1>(event.arguments) = layer->width;
+        std::get<2>(event.arguments) = layer->height;
+        protocol_writer writer;
+        if (auto encoded =
+                generated::zwlr_layer_surface_v1::event_configure::encode(writer, layer->id, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+        layer->configured = true;
+        layer->configure_serial = serial;
+        return {};
+    }
+    return {};
 }
 
 auto core_protocol::create_linux_buffer_params(object_id id) -> result<void> {

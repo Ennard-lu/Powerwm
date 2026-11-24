@@ -219,6 +219,22 @@ list(APPEND POWERWM_PROTOCOL_OUTPUTS
     "${POWERWM_GENERATED_PROTOCOL_DIR}/linux_dmabuf_bindings.hpp"
     "${POWERWM_GENERATED_PROTOCOL_DIR}/linux_dmabuf_bindings.cpp")
 
+add_custom_command(
+    OUTPUT
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/layer_shell_bindings.hpp"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/layer_shell_bindings.cpp"
+    COMMAND $<TARGET_FILE:powerwm_protocol_scanner>
+        "${CMAKE_SOURCE_DIR}/protocols/wlr-layer-shell-unstable-v1.xml"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/layer_shell_bindings.hpp"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/layer_shell_bindings.cpp"
+    DEPENDS powerwm_protocol_scanner "${CMAKE_SOURCE_DIR}/protocols/wlr-layer-shell-unstable-v1.xml"
+    COMMENT "Generating layer-shell bindings"
+    VERBATIM
+)
+list(APPEND POWERWM_PROTOCOL_OUTPUTS
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/layer_shell_bindings.hpp"
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/layer_shell_bindings.cpp")
+
 add_custom_target(powerwm_protocols DEPENDS ${POWERWM_PROTOCOL_OUTPUTS})
 
 add_library(powerwm_wayland STATIC
@@ -241,6 +257,7 @@ add_library(powerwm_wayland STATIC
     "${POWERWM_GENERATED_PROTOCOL_DIR}/presentation_time_bindings.cpp"
     "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_activation_bindings.cpp"
     "${POWERWM_GENERATED_PROTOCOL_DIR}/linux_dmabuf_bindings.cpp"
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/layer_shell_bindings.cpp"
 )
 target_include_directories(powerwm_wayland PUBLIC
     ${CMAKE_SOURCE_DIR}/src

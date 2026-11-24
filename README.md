@@ -63,6 +63,7 @@ Working today:
 - cross-client clipboard selection, mime offers, file-descriptor transfer, and
   drag-and-drop enter/motion/drop events
 - `linux-dmabuf-v1` with Vulkan DMA-BUF import for surface rendering
+- `wlr-layer-shell-unstable-v1` panels, bars, and overlays
 - real GTK4 client connects and commits a shm window
 
 Still ahead:

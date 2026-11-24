@@ -10,6 +10,7 @@
 #include <wayland/wire.hpp>
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -246,6 +247,53 @@ struct linux_dmabuf_object {
         -> result<void>;
 };
 
+struct layer_surface_geometry {
+    base::recti bounds;
+    u32 layer = 0;
+    i32 exclusive = 0;
+    bool keyboard_interactive = false;
+};
+
+struct layer_surface_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    object_id surface = 0;
+    object_id output = 0;
+    u32 layer = 0;
+    std::string space;
+    u32 anchor = 0;
+    u32 width = 0;
+    u32 height = 0;
+    i32 exclusive = 0;
+    i32 margin_top = 0;
+    i32 margin_right = 0;
+    i32 margin_bottom = 0;
+    i32 margin_left = 0;
+    u32 keyboard = 0;
+    bool configured = false;
+    u32 configure_serial = 0;
+
+    [[nodiscard]] auto request_set_size(u32 width, u32 height) -> result<void>;
+    [[nodiscard]] auto request_set_anchor(u32 anchor) -> result<void>;
+    [[nodiscard]] auto request_set_exclusive_zone(i32 zone) -> result<void>;
+    [[nodiscard]] auto request_set_margin(i32 top, i32 right, i32 bottom, i32 left) -> result<void>;
+    [[nodiscard]] auto request_set_keyboard_interactivity(u32 value) -> result<void>;
+    [[nodiscard]] auto request_get_popup(object_id popup) -> result<void>;
+    [[nodiscard]] auto request_ack_configure(u32 serial) -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_set_layer(u32 layer) -> result<void>;
+};
+
+struct layer_shell_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    u32 version = 1;
+
+    [[nodiscard]] auto request_get_layer_surface(object_id id, object_id surface, object_id output,
+                                                 u32 layer, std::string_view space) -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+};
+
 struct output_object {
     core_protocol* core = nullptr;
     object_id id = 0;
@@ -389,6 +437,13 @@ class core_protocol {
                                             u64 modifier, bool server_created) -> result<void>;
     [[nodiscard]] auto allocate_server_object_id() noexcept -> object_id;
     [[nodiscard]] auto create_linux_buffer_params(object_id id) -> result<void>;
+    [[nodiscard]] auto create_layer_shell(object_id id, u32 version) -> result<void>;
+    [[nodiscard]] auto create_layer_surface(object_id id, object_id surface, object_id output,
+                                            u32 layer, std::string_view space) -> result<void>;
+    [[nodiscard]] auto layer_geometry(object_id surface, u32 output_width, u32 output_height,
+                                      i32 buffer_width, i32 buffer_height) const
+        -> std::optional<layer_surface_geometry>;
+    [[nodiscard]] auto configure_layer_surface(object_id surface) -> result<void>;
     [[nodiscard]] auto send_linux_buffer_created(object_id params, object_id buffer)
         -> result<void>;
     [[nodiscard]] auto send_linux_buffer_failed(object_id params) -> result<void>;
@@ -457,6 +512,8 @@ class core_protocol {
     friend struct data_device_object;
     friend struct linux_buffer_params_object;
     friend struct linux_dmabuf_object;
+    friend struct layer_surface_object;
+    friend struct layer_shell_object;
 
     [[nodiscard]] auto send_shm_formats(object_id id) -> result<void>;
     [[nodiscard]] auto send_output_events(object_id id, u32 version) -> result<void>;
@@ -502,6 +559,8 @@ class core_protocol {
     std::vector<std::unique_ptr<data_offer_object>> data_offers_;
     std::vector<std::unique_ptr<linux_dmabuf_object>> linux_dmabufs_;
     std::vector<std::unique_ptr<linux_buffer_params_object>> linux_buffer_params_;
+    std::vector<std::unique_ptr<layer_shell_object>> layer_shells_;
+    std::vector<std::unique_ptr<layer_surface_object>> layer_surfaces_;
     std::vector<object_id> pointer_ids_;
     std::vector<object_id> keyboard_ids_;
     std::vector<object_id> touch_ids_;

@@ -9,6 +9,7 @@
 #include <wayland/xdg_shell.hpp>
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -206,6 +207,10 @@ class display_service {
         -> result<object_id>;
 
     [[nodiscard]] auto send_selection(object_id offer) -> result<void>;
+
+    [[nodiscard]] auto layer_geometry(object_id surface, u32 output_width, u32 output_height,
+                                      i32 buffer_width, i32 buffer_height) const
+        -> std::optional<layer_surface_geometry>;
 
     [[nodiscard]] auto receive_data_offer(object_id offer, u32 source_client,
                                           object_id source_object, std::string_view mime_type,
