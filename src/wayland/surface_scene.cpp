@@ -23,7 +23,7 @@ surface_scene::surface_scene(const vulkanpp::device& device, u32 output_width,
     graph_.root().add_child(background_);
 }
 
-auto surface_scene::find_surface(object_id surface) noexcept -> surface_entry* {
+auto surface_scene::find_surface(u64 surface) noexcept -> surface_entry* {
     const auto iterator =
         std::ranges::find_if(surfaces_, [surface](const std::unique_ptr<surface_entry>& entry) {
             return entry->surface == surface;
@@ -31,12 +31,12 @@ auto surface_scene::find_surface(object_id surface) noexcept -> surface_entry* {
     return iterator == surfaces_.end() ? nullptr : iterator->get();
 }
 
-auto surface_scene::next_cascade(object_id) noexcept -> base::recti {
+auto surface_scene::next_cascade() noexcept -> base::recti {
     const usize index = surfaces_.empty() ? 0 : surfaces_.size() - 1;
     return {32 + static_cast<i32>(index % 8) * 40, 32 + static_cast<i32>(index / 8) * 40, 0, 0};
 }
 
-auto surface_scene::ensure_surface(object_id surface) -> surface_entry& {
+auto surface_scene::ensure_surface(u64 surface) -> surface_entry& {
     if (surface_entry* existing = find_surface(surface); existing != nullptr) {
         return *existing;
     }
@@ -54,7 +54,11 @@ auto surface_scene::ensure_surface(object_id surface) -> surface_entry& {
 }
 
 auto surface_scene::on_commit(const surface_commit_event& event) -> result<void> {
-    surface_entry& entry = ensure_surface(event.surface);
+    return on_commit(event.surface, event);
+}
+
+auto surface_scene::on_commit(u64 surface_key, const surface_commit_event& event) -> result<void> {
+    surface_entry& entry = ensure_surface(surface_key);
     if (event.buffer == 0) {
         base::recti old_bounds = entry.node.bounds();
         entry.node.set_visible(false);
@@ -101,7 +105,7 @@ auto surface_scene::on_commit(const surface_commit_event& event) -> result<void>
     const base::recti old_bounds = entry.node.bounds();
     base::recti bounds = entry.bounds;
     if (bounds.is_empty()) {
-        bounds = next_cascade(entry.surface);
+        bounds = next_cascade();
         bounds.width = event.width;
         bounds.height = event.height;
     }
@@ -115,8 +119,8 @@ auto surface_scene::on_commit(const surface_commit_event& event) -> result<void>
     return {};
 }
 
-auto surface_scene::set_surface_bounds(object_id surface, base::recti bounds) -> result<void> {
-    surface_entry* entry = find_surface(surface);
+auto surface_scene::set_surface_bounds(u64 surface_key, base::recti bounds) -> result<void> {
+    surface_entry* entry = find_surface(surface_key);
     if (entry == nullptr) {
         return std::unexpected(make_error(error_code::not_found, "surface is unknown"));
     }

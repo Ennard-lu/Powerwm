@@ -22,7 +22,10 @@ class surface_scene {
 
     [[nodiscard]] auto on_commit(const surface_commit_event& event) -> result<void>;
 
-    [[nodiscard]] auto set_surface_bounds(object_id surface, base::recti bounds) -> result<void>;
+    [[nodiscard]] auto on_commit(u64 surface_key, const surface_commit_event& event)
+        -> result<void>;
+
+    [[nodiscard]] auto set_surface_bounds(u64 surface_key, base::recti bounds) -> result<void>;
 
     [[nodiscard]] auto scene_graph() noexcept -> scene::scene&;
 
@@ -30,17 +33,17 @@ class surface_scene {
 
   private:
     struct surface_entry {
-        object_id surface = 0;
+        u64 surface = 0;
         scene::node node;
         std::unique_ptr<vulkanpp::texture> texture;
         scene::texture_id texture_id = 0;
         base::recti bounds{};
     };
 
-    auto find_surface(object_id surface) noexcept -> surface_entry*;
-    auto ensure_surface(object_id surface) -> surface_entry&;
+    auto find_surface(u64 surface) noexcept -> surface_entry*;
+    auto ensure_surface(u64 surface) -> surface_entry&;
     auto rebuild_bindings() -> void;
-    [[nodiscard]] auto next_cascade(object_id surface) noexcept -> base::recti;
+    [[nodiscard]] auto next_cascade() noexcept -> base::recti;
 
     const vulkanpp::device* device_;
     scene::scene graph_;
