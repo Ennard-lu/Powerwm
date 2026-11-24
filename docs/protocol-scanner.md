@@ -147,8 +147,8 @@ a shm window. `wl_subcompositor` and `wl_data_device_manager` object skeletons a
 available; `zxdg_output_manager_v1` provides logical output geometry and metadata for
 GTK-style clients. Viewporter, fractional scaling, xdg-decoration, xdg-activation, and
 presentation feedback is deferred to the next KMS page flip. The KMS compositor brokers
-cross-client clipboard selection, mime offers, and fd transfer. Drag-and-drop events are
-still pending.
+cross-client clipboard selection, mime offers, and fd transfer, and tracks drag-and-drop
+targets with enter, motion, drop, action, and finish events.
 
 Client-id lifetime, drag-and-drop, linux-dmabuf, layer-shell, coroutine sessions, and
 broader real-client validation are the next Phase 3 steps.

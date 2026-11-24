@@ -378,6 +378,16 @@ class core_protocol {
     [[nodiscard]] auto send_data_source_target(object_id source, std::string_view mime)
         -> result<void>;
     [[nodiscard]] auto send_data_source_cancelled(object_id source) -> result<void>;
+    [[nodiscard]] auto send_data_source_action(object_id source, u32 action) -> result<void>;
+    [[nodiscard]] auto send_data_source_dnd_drop_performed(object_id source) -> result<void>;
+    [[nodiscard]] auto send_data_source_dnd_finished(object_id source) -> result<void>;
+    [[nodiscard]] auto send_data_offer_event(object_id offer) -> result<void>;
+    [[nodiscard]] auto send_data_device_enter(u32 serial, object_id surface, f64 x, f64 y,
+                                              object_id offer) -> result<void>;
+    [[nodiscard]] auto send_data_device_leave() -> result<void>;
+    [[nodiscard]] auto send_data_device_motion(u32 time_ms, f64 x, f64 y) -> result<void>;
+    [[nodiscard]] auto send_data_device_drop() -> result<void>;
+    auto destroy_data_offer(object_id offer) -> void;
 
     auto set_surface_commit_callback(surface_commit_callback callback, void* context) noexcept
         -> void;
@@ -398,6 +408,7 @@ class core_protocol {
     friend struct data_device_manager_object;
     friend struct data_offer_object;
     friend struct data_source_object;
+    friend struct data_device_object;
 
     [[nodiscard]] auto send_shm_formats(object_id id) -> result<void>;
     [[nodiscard]] auto send_output_events(object_id id, u32 version) -> result<void>;

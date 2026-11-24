@@ -424,6 +424,15 @@ auto display_service::notify_data_source_destroyed(object_id source) -> void {
     }
 }
 
+auto display_service::data_source_mime_types(object_id source) const
+    -> std::span<const std::string> {
+    return core_.data_source_mime_types(source);
+}
+
+auto display_service::data_source_actions(object_id source) const noexcept -> u32 {
+    return core_.data_source_actions(source);
+}
+
 auto display_service::create_data_offer(u32 source_client, object_id source_object,
                                         std::span<const std::string> mime_types, u32 actions)
     -> result<object_id> {
@@ -473,6 +482,96 @@ auto display_service::send_data_source_target(object_id source, std::string_view
 
 auto display_service::send_data_source_cancelled(object_id source) -> result<void> {
     return core_.send_data_source_cancelled(source);
+}
+
+auto display_service::set_data_drag_callback(data_drag_callback callback, void* context) noexcept
+    -> void {
+    data_drag_callback_ = callback;
+    data_drag_context_ = context;
+}
+
+auto display_service::set_data_offer_actions_callback(data_offer_actions_callback callback,
+                                                      void* context) noexcept -> void {
+    data_offer_actions_callback_ = callback;
+    data_offer_actions_context_ = context;
+}
+
+auto display_service::set_data_offer_finished_callback(data_offer_finished_callback callback,
+                                                       void* context) noexcept -> void {
+    data_offer_finished_callback_ = callback;
+    data_offer_finished_context_ = context;
+}
+
+auto display_service::start_data_drag(object_id source, object_id origin, object_id icon,
+                                      u32 serial) -> result<void> {
+    if (data_drag_callback_ == nullptr) {
+        return {};
+    }
+    data_drag_callback_(data_drag_context_,
+                        {.source = source, .origin = origin, .icon = icon, .serial = serial});
+    return {};
+}
+
+auto display_service::data_offer_actions(object_id offer, u32 source_client,
+                                         object_id source_object, u32 source_actions, u32 action)
+    -> result<void> {
+    if (data_offer_actions_callback_ == nullptr) {
+        return {};
+    }
+    data_offer_actions_callback_(data_offer_actions_context_, {.offer = offer,
+                                                               .source_client = source_client,
+                                                               .source_object = source_object,
+                                                               .source_actions = source_actions,
+                                                               .action = action});
+    return {};
+}
+
+auto display_service::finish_data_offer(object_id offer, u32 source_client, object_id source_object)
+    -> result<void> {
+    if (data_offer_finished_callback_ == nullptr) {
+        return {};
+    }
+    data_offer_finished_callback_(
+        data_offer_finished_context_,
+        {.offer = offer, .source_client = source_client, .source_object = source_object});
+    return {};
+}
+
+auto display_service::send_data_source_action(object_id source, u32 action) -> result<void> {
+    return core_.send_data_source_action(source, action);
+}
+
+auto display_service::send_data_source_dnd_drop_performed(object_id source) -> result<void> {
+    return core_.send_data_source_dnd_drop_performed(source);
+}
+
+auto display_service::send_data_source_dnd_finished(object_id source) -> result<void> {
+    return core_.send_data_source_dnd_finished(source);
+}
+
+auto display_service::send_data_offer_event(object_id offer) -> result<void> {
+    return core_.send_data_offer_event(offer);
+}
+
+auto display_service::send_data_device_enter(u32 serial, object_id surface, f64 x, f64 y,
+                                             object_id offer) -> result<void> {
+    return core_.send_data_device_enter(serial, surface, x, y, offer);
+}
+
+auto display_service::send_data_device_leave() -> result<void> {
+    return core_.send_data_device_leave();
+}
+
+auto display_service::send_data_device_motion(u32 time_ms, f64 x, f64 y) -> result<void> {
+    return core_.send_data_device_motion(time_ms, x, y);
+}
+
+auto display_service::send_data_device_drop() -> result<void> {
+    return core_.send_data_device_drop();
+}
+
+auto display_service::destroy_data_offer(object_id offer) -> void {
+    core_.destroy_data_offer(offer);
 }
 
 auto display_service::send_callback_done(object_id callback, u32 data) -> result<void> {

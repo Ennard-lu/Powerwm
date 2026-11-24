@@ -80,6 +80,8 @@ pre-1.0 `0.x.y` convention.
 - Cross-client clipboard: `wl_data_source` mime offers, `wl_data_device.set_selection`,
   compositor-brokered `wl_data_offer` creation, accept targets, and `receive` file
   descriptor forwarding between clients.
+- Drag-and-drop: `start_drag` tracking, data-device `data_offer`/`enter`/`motion`/`drop`
+  events, offer actions, `dnd_drop_performed`, `dnd_finished`, and cancellation.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

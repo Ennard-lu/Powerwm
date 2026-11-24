@@ -60,7 +60,8 @@ Working today:
 - keyboard, pointer, and touch event delivery with scene hit testing
 - subcompositor, xdg-output, viewporter, fractional-scale, xdg-decoration,
   xdg-activation, and page-flip presentation feedback
-- cross-client clipboard selection, mime offers, and file-descriptor transfer
+- cross-client clipboard selection, mime offers, file-descriptor transfer, and
+  drag-and-drop enter/motion/drop events
 - real GTK4 client connects and commits a shm window
 
 Still ahead:

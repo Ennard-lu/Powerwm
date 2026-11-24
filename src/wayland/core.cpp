@@ -393,13 +393,21 @@ auto data_offer_object::request_destroy() -> result<void> {
 }
 
 auto data_offer_object::request_finish() -> result<void> {
-    return {};
+    return core->service().finish_data_offer(id, source_client, source_object);
 }
 
 auto data_offer_object::request_set_actions(u32 source_actions, u32 action) -> result<void> {
-    static_cast<void>(source_actions);
-    static_cast<void>(action);
-    return {};
+    constexpr u32 action_mask = 0x7;
+    if ((source_actions & ~action_mask) != 0 || (action & ~action_mask) != 0 ||
+        (action & (action - 1)) != 0) {
+        return std::unexpected(make_error(error_code::protocol, "drag action mask is invalid"));
+    }
+    if (action != 0 && (action & source_actions) == 0) {
+        return std::unexpected(
+            make_error(error_code::protocol, "drag action is not offered by the source"));
+    }
+    return core->service().data_offer_actions(id, source_client, source_object, source_actions,
+                                              action);
 }
 
 auto data_source_object::request_offer(std::string_view mime) -> result<void> {
@@ -420,11 +428,10 @@ auto data_source_object::request_set_actions(u32 value) -> result<void> {
 
 auto data_device_object::request_start_drag(object_id source, object_id origin, object_id icon,
                                             u32 serial) -> result<void> {
-    static_cast<void>(source);
-    static_cast<void>(origin);
-    static_cast<void>(icon);
-    static_cast<void>(serial);
-    return {};
+    if (source == 0) {
+        return {};
+    }
+    return core->service().start_data_drag(source, origin, icon, serial);
 }
 
 auto data_device_object::request_set_selection(object_id source, u32 serial) -> result<void> {
@@ -925,6 +932,131 @@ auto core_protocol::send_data_source_cancelled(object_id source) -> result<void>
         return std::unexpected(encoded.error());
     }
     return service_->queue_event(writer);
+}
+
+auto core_protocol::send_data_source_action(object_id source, u32 action) -> result<void> {
+    generated::wl_data_source::event_action event{};
+    std::get<0>(event.arguments) = action;
+    protocol_writer writer;
+    if (auto encoded = generated::wl_data_source::event_action::encode(writer, source, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return service_->queue_event(writer);
+}
+
+auto core_protocol::send_data_source_dnd_drop_performed(object_id source) -> result<void> {
+    generated::wl_data_source::event_dnd_drop_performed event{};
+    protocol_writer writer;
+    if (auto encoded =
+            generated::wl_data_source::event_dnd_drop_performed::encode(writer, source, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return service_->queue_event(writer);
+}
+
+auto core_protocol::send_data_source_dnd_finished(object_id source) -> result<void> {
+    generated::wl_data_source::event_dnd_finished event{};
+    protocol_writer writer;
+    if (auto encoded = generated::wl_data_source::event_dnd_finished::encode(writer, source, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return service_->queue_event(writer);
+}
+
+auto core_protocol::send_data_offer_event(object_id offer) -> result<void> {
+    for (const auto& device : data_devices_) {
+        generated::wl_data_device::event_data_offer event{};
+        std::get<0>(event.arguments) = offer;
+        protocol_writer writer;
+        if (auto encoded =
+                generated::wl_data_device::event_data_offer::encode(writer, device->id, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto core_protocol::send_data_device_enter(u32 serial, object_id surface, f64 x, f64 y,
+                                           object_id offer) -> result<void> {
+    for (const auto& device : data_devices_) {
+        generated::wl_data_device::event_enter event{};
+        std::get<0>(event.arguments) = serial;
+        std::get<1>(event.arguments) = surface;
+        std::get<2>(event.arguments) = x;
+        std::get<3>(event.arguments) = y;
+        std::get<4>(event.arguments) = offer;
+        protocol_writer writer;
+        if (auto encoded =
+                generated::wl_data_device::event_enter::encode(writer, device->id, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto core_protocol::send_data_device_leave() -> result<void> {
+    for (const auto& device : data_devices_) {
+        generated::wl_data_device::event_leave event{};
+        protocol_writer writer;
+        if (auto encoded =
+                generated::wl_data_device::event_leave::encode(writer, device->id, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto core_protocol::send_data_device_motion(u32 time_ms, f64 x, f64 y) -> result<void> {
+    for (const auto& device : data_devices_) {
+        generated::wl_data_device::event_motion event{};
+        std::get<0>(event.arguments) = time_ms;
+        std::get<1>(event.arguments) = x;
+        std::get<2>(event.arguments) = y;
+        protocol_writer writer;
+        if (auto encoded =
+                generated::wl_data_device::event_motion::encode(writer, device->id, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto core_protocol::send_data_device_drop() -> result<void> {
+    for (const auto& device : data_devices_) {
+        generated::wl_data_device::event_drop event{};
+        protocol_writer writer;
+        if (auto encoded = generated::wl_data_device::event_drop::encode(writer, device->id, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto core_protocol::destroy_data_offer(object_id offer) -> void {
+    service_->connection_ref().objects().remove(offer);
 }
 
 auto core_protocol::send_keyboard_keymap(object_id id) -> result<void> {

@@ -72,6 +72,17 @@ struct clipboard_source {
     std::vector<std::string> mime_types;
 };
 
+struct drag_source {
+    pwm::u32 client = 0;
+    wayland::object_id source = 0;
+    pwm::u32 actions = 0;
+    pwm::u32 action = 0;
+    std::vector<std::string> mime_types;
+    pwm::u64 focus_surface = 0;
+    wayland::object_id focus_offer = 0;
+    bool dropped = false;
+};
+
 struct compositor_state {
     drm::device* device = nullptr;
     seat::session* session = nullptr;
@@ -89,6 +100,7 @@ struct compositor_state {
     std::vector<std::unique_ptr<client_session>> clients;
     std::vector<pending_feedback> pending_presentations;
     std::optional<clipboard_source> clipboard;
+    std::optional<drag_source> drag;
     pwm::u32 next_client = 1;
     bool session_enabled = false;
     bool waiting_for_flip = false;
@@ -139,6 +151,8 @@ auto on_client_commit(void* context, const wayland::surface_commit_event& commit
 }
 
 auto find_client(compositor_state& state, pwm::u32 index) -> client_session*;
+auto end_drag(compositor_state& state) -> void;
+auto cancel_drag(compositor_state& state) -> void;
 
 auto broadcast_selection(compositor_state& state) -> void {
     for (const auto& session : state.clients) {
@@ -208,6 +222,9 @@ auto on_data_source_destroyed(void* context, wayland::object_id source) -> void 
         state.clipboard.reset();
         broadcast_selection(state);
     }
+    if (state.drag && state.drag->client == session.index && state.drag->source == source) {
+        end_drag(state);
+    }
 }
 
 auto on_data_offer_receive(void* context, const wayland::data_offer_receive_event& event) -> void {
@@ -218,6 +235,152 @@ auto on_data_offer_receive(void* context, const wayland::data_offer_receive_even
     }
     static_cast<void>(
         source->display.send_data_source_send(event.source_object, event.mime_type, event.fd));
+}
+
+auto send_drag_leave(compositor_state& state) -> void {
+    if (!state.drag || state.drag->focus_surface == 0) {
+        return;
+    }
+    auto* client = find_client(state, static_cast<pwm::u32>(state.drag->focus_surface >> 32U));
+    if (client != nullptr && !client->closed) {
+        static_cast<void>(client->display.send_data_device_leave());
+        client->display.destroy_data_offer(state.drag->focus_offer);
+        static_cast<void>(client->connection.flush());
+    }
+    state.drag->focus_surface = 0;
+    state.drag->focus_offer = 0;
+}
+
+auto end_drag(compositor_state& state) -> void {
+    send_drag_leave(state);
+    state.drag.reset();
+}
+
+auto cancel_drag(compositor_state& state) -> void {
+    if (!state.drag) {
+        return;
+    }
+    auto* source = find_client(state, state.drag->client);
+    if (source != nullptr && !source->closed && !state.drag->dropped) {
+        static_cast<void>(source->display.send_data_source_cancelled(state.drag->source));
+        static_cast<void>(source->connection.flush());
+    }
+    end_drag(state);
+}
+
+auto update_drag_focus(compositor_state& state) -> void {
+    if (!state.drag) {
+        return;
+    }
+    const pwm::u64 focus = state.scene->hit_test(state.cursor_x, state.cursor_y).value_or(0);
+    if (focus == state.drag->focus_surface) {
+        return;
+    }
+    send_drag_leave(state);
+    if (focus == 0) {
+        return;
+    }
+    auto* client = find_client(state, static_cast<pwm::u32>(focus >> 32U));
+    const auto bounds = state.scene->surface_bounds(focus);
+    if (client == nullptr || client->closed || !bounds) {
+        return;
+    }
+    auto offer = client->display.create_data_offer(state.drag->client, state.drag->source,
+                                                   state.drag->mime_types, state.drag->actions);
+    if (!offer) {
+        return;
+    }
+    state.drag->focus_surface = focus;
+    state.drag->focus_offer = *offer;
+    static_cast<void>(client->display.send_data_offer_event(*offer));
+    static_cast<void>(client->display.send_data_device_enter(
+        client->display.next_serial(), static_cast<wayland::object_id>(focus),
+        state.cursor_x - bounds->x, state.cursor_y - bounds->y, *offer));
+    static_cast<void>(client->connection.flush());
+}
+
+auto motion_drag(compositor_state& state, pwm::u32 time_ms) -> void {
+    if (!state.drag || state.drag->focus_surface == 0) {
+        return;
+    }
+    auto* client = find_client(state, static_cast<pwm::u32>(state.drag->focus_surface >> 32U));
+    const auto bounds = state.scene->surface_bounds(state.drag->focus_surface);
+    if (client == nullptr || client->closed || !bounds) {
+        return;
+    }
+    static_cast<void>(client->display.send_data_device_motion(time_ms, state.cursor_x - bounds->x,
+                                                              state.cursor_y - bounds->y));
+    static_cast<void>(client->connection.flush());
+}
+
+auto drop_drag(compositor_state& state) -> void {
+    if (!state.drag) {
+        return;
+    }
+    if (state.drag->focus_surface == 0) {
+        cancel_drag(state);
+        return;
+    }
+    auto* target = find_client(state, static_cast<pwm::u32>(state.drag->focus_surface >> 32U));
+    auto* source = find_client(state, state.drag->client);
+    if (target != nullptr && !target->closed) {
+        static_cast<void>(target->display.send_data_device_drop());
+        static_cast<void>(target->connection.flush());
+    }
+    if (source != nullptr && !source->closed) {
+        static_cast<void>(source->display.send_data_source_dnd_drop_performed(state.drag->source));
+        static_cast<void>(source->connection.flush());
+    }
+    state.drag->dropped = true;
+    state.drag->focus_surface = 0;
+    state.drag->focus_offer = 0;
+}
+
+auto on_data_drag(void* context, const wayland::data_drag_event& event) -> void {
+    auto& session = *static_cast<client_session*>(context);
+    auto& state = *session.compositor;
+    cancel_drag(state);
+    const auto mime_types = session.display.data_source_mime_types(event.source);
+    state.drag = drag_source{
+        .client = session.index,
+        .source = event.source,
+        .actions = session.display.data_source_actions(event.source),
+        .mime_types = std::vector<std::string>{mime_types.begin(), mime_types.end()},
+    };
+}
+
+auto on_data_offer_actions(void* context, const wayland::data_offer_actions_event& event) -> void {
+    auto& session = *static_cast<client_session*>(context);
+    auto& state = *session.compositor;
+    if (!state.drag || state.drag->source != event.source_object) {
+        return;
+    }
+    state.drag->action = event.action;
+    auto* source = find_client(state, event.source_client);
+    if (source != nullptr && !source->closed && event.action != 0) {
+        static_cast<void>(
+            source->display.send_data_source_action(event.source_object, event.action));
+        static_cast<void>(source->connection.flush());
+    }
+}
+
+auto on_data_offer_finished(void* context, const wayland::data_offer_finished_event& event)
+    -> void {
+    auto& session = *static_cast<client_session*>(context);
+    auto& state = *session.compositor;
+    if (!state.drag || state.drag->source != event.source_object) {
+        return;
+    }
+    auto* source = find_client(state, event.source_client);
+    if (source != nullptr && !source->closed) {
+        if (state.drag->action != 0) {
+            static_cast<void>(
+                source->display.send_data_source_action(event.source_object, state.drag->action));
+        }
+        static_cast<void>(source->display.send_data_source_dnd_finished(event.source_object));
+        static_cast<void>(source->connection.flush());
+    }
+    end_drag(state);
 }
 
 auto on_data_offer_accept(void* context, const wayland::data_offer_accept_event& event) -> void {
@@ -287,6 +450,9 @@ auto accept_client(compositor_state& state) -> void {
     session->display.set_data_source_destroyed_callback(on_data_source_destroyed, session.get());
     session->display.set_data_offer_receive_callback(on_data_offer_receive, session.get());
     session->display.set_data_offer_accept_callback(on_data_offer_accept, session.get());
+    session->display.set_data_drag_callback(on_data_drag, session.get());
+    session->display.set_data_offer_actions_callback(on_data_offer_actions, session.get());
+    session->display.set_data_offer_finished_callback(on_data_offer_finished, session.get());
     if (auto added = state.loop->add(session->connection.fd(), event::poll_event::readable,
                                      on_client, session.get());
         !added) {
@@ -332,6 +498,8 @@ auto on_input_event(void* context, event::poll_event) -> void {
                                         static_cast<pwm::f64>(state.output->mode.width_px() - 1));
             state.cursor_y = std::clamp(state.cursor_y + input_event->dy, 0.0,
                                         static_cast<pwm::f64>(state.output->mode.height_px() - 1));
+            update_drag_focus(state);
+            motion_drag(state, input_event->time_ms);
             const auto hit = state.scene->hit_test(state.cursor_x, state.cursor_y);
             const pwm::u64 next_focus = hit.value_or(0);
             if (next_focus != state.pointer_focus) {
@@ -370,6 +538,9 @@ auto on_input_event(void* context, event::poll_event) -> void {
             }
         } else if (input_event->type == input::input_event_type::pointer_button &&
                    state.pointer_focus != 0) {
+            if (state.drag && !input_event->pressed) {
+                drop_drag(state);
+            }
             auto* client = find_client(state, static_cast<pwm::u32>(state.pointer_focus >> 32U));
             if (client != nullptr) {
                 static_cast<void>(client->display.send_pointer_button(

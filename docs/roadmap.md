@@ -178,7 +178,7 @@ libwayland.
   KMS page flip; tested with GTK4;
 - [x] GTK4 Wayland client connects and commits a shm window;
 - [x] cross-client clipboard selection, offers, mime negotiation, and fd transfer;
-- [ ] drag-and-drop enter, motion, drop, and finish flow;
+- [x] drag-and-drop offer, enter, motion, drop, action, and finish flow;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [x] in-tree socket handshake and raw-wire client verification;

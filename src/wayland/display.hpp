@@ -64,6 +64,35 @@ struct data_offer_accept_event {
 using data_offer_accept_callback = auto (*)(void* context, const data_offer_accept_event& event)
     -> void;
 
+struct data_drag_event {
+    object_id source = 0;
+    object_id origin = 0;
+    object_id icon = 0;
+    u32 serial = 0;
+};
+
+using data_drag_callback = auto (*)(void* context, const data_drag_event& event) -> void;
+
+struct data_offer_actions_event {
+    object_id offer = 0;
+    u32 source_client = 0;
+    object_id source_object = 0;
+    u32 source_actions = 0;
+    u32 action = 0;
+};
+
+using data_offer_actions_callback = auto (*)(void* context, const data_offer_actions_event& event)
+    -> void;
+
+struct data_offer_finished_event {
+    object_id offer = 0;
+    u32 source_client = 0;
+    object_id source_object = 0;
+};
+
+using data_offer_finished_callback = auto (*)(void* context, const data_offer_finished_event& event)
+    -> void;
+
 struct display_object {
     display_service* service = nullptr;
 
@@ -167,6 +196,11 @@ class display_service {
 
     [[nodiscard]] auto notify_data_source_destroyed(object_id source) -> void;
 
+    [[nodiscard]] auto data_source_mime_types(object_id source) const
+        -> std::span<const std::string>;
+
+    [[nodiscard]] auto data_source_actions(object_id source) const noexcept -> u32;
+
     [[nodiscard]] auto create_data_offer(u32 source_client, object_id source_object,
                                          std::span<const std::string> mime_types, u32 actions)
         -> result<object_id>;
@@ -189,6 +223,43 @@ class display_service {
 
     [[nodiscard]] auto send_data_source_cancelled(object_id source) -> result<void>;
 
+    auto set_data_drag_callback(data_drag_callback callback, void* context) noexcept -> void;
+
+    auto set_data_offer_actions_callback(data_offer_actions_callback callback,
+                                         void* context) noexcept -> void;
+
+    auto set_data_offer_finished_callback(data_offer_finished_callback callback,
+                                          void* context) noexcept -> void;
+
+    [[nodiscard]] auto start_data_drag(object_id source, object_id origin, object_id icon,
+                                       u32 serial) -> result<void>;
+
+    [[nodiscard]] auto data_offer_actions(object_id offer, u32 source_client,
+                                          object_id source_object, u32 source_actions, u32 action)
+        -> result<void>;
+
+    [[nodiscard]] auto finish_data_offer(object_id offer, u32 source_client,
+                                         object_id source_object) -> result<void>;
+
+    [[nodiscard]] auto send_data_source_action(object_id source, u32 action) -> result<void>;
+
+    [[nodiscard]] auto send_data_source_dnd_drop_performed(object_id source) -> result<void>;
+
+    [[nodiscard]] auto send_data_source_dnd_finished(object_id source) -> result<void>;
+
+    [[nodiscard]] auto send_data_offer_event(object_id offer) -> result<void>;
+
+    [[nodiscard]] auto send_data_device_enter(u32 serial, object_id surface, f64 x, f64 y,
+                                              object_id offer) -> result<void>;
+
+    [[nodiscard]] auto send_data_device_leave() -> result<void>;
+
+    [[nodiscard]] auto send_data_device_motion(u32 time_ms, f64 x, f64 y) -> result<void>;
+
+    [[nodiscard]] auto send_data_device_drop() -> result<void>;
+
+    auto destroy_data_offer(object_id offer) -> void;
+
   private:
     friend struct display_object;
     friend struct registry_object;
@@ -207,6 +278,12 @@ class display_service {
     void* data_offer_receive_context_ = nullptr;
     data_offer_accept_callback data_offer_accept_callback_ = nullptr;
     void* data_offer_accept_context_ = nullptr;
+    data_drag_callback data_drag_callback_ = nullptr;
+    void* data_drag_context_ = nullptr;
+    data_offer_actions_callback data_offer_actions_callback_ = nullptr;
+    void* data_offer_actions_context_ = nullptr;
+    data_offer_finished_callback data_offer_finished_callback_ = nullptr;
+    void* data_offer_finished_context_ = nullptr;
     std::vector<std::unique_ptr<registry_object>> registries_;
     std::vector<registry_global> globals_;
     u32 next_global_name_ = 1;
