@@ -117,6 +117,7 @@ add_library(powerwm_wayland STATIC
     src/wayland/core.cpp
     src/wayland/display.cpp
     src/wayland/object_table.cpp
+    src/wayland/surface_scene.cpp
     src/wayland/wire.cpp
     src/wayland/xdg_shell.cpp
     "${POWERWM_GENERATED_PROTOCOL_DIR}/wayland_bindings.cpp"
@@ -126,7 +127,7 @@ target_include_directories(powerwm_wayland PUBLIC
     ${CMAKE_SOURCE_DIR}/src
     "${POWERWM_GENERATED_PROTOCOL_DIR}"
 )
-target_link_libraries(powerwm_wayland PUBLIC powerwm_core powerwm_protocol_scan)
+target_link_libraries(powerwm_wayland PUBLIC powerwm_core powerwm_protocol_scan powerwm_vulkanpp)
 add_dependencies(powerwm_wayland powerwm_protocols)
 
 add_library(powerwm_input STATIC
@@ -245,7 +246,7 @@ if(BUILD_TESTING)
     add_test(NAME unit.scene COMMAND powerwm_scene_tests)
 
     add_executable(powerwm_render_tests tests/unit/test_render.cpp)
-    target_link_libraries(powerwm_render_tests PRIVATE powerwm_vulkanpp)
+    target_link_libraries(powerwm_render_tests PRIVATE powerwm_vulkanpp powerwm_wayland)
     target_compile_definitions(powerwm_render_tests PRIVATE
         POWERWM_SHADER_DIR="${POWERWM_SHADER_BINARY_DIR}"
     )

@@ -8,6 +8,7 @@
 #include <render/vulkanpp/scene_renderer.hpp>
 #include <render/vulkanpp/texture.hpp>
 #include <scene/scene.hpp>
+#include <wayland/surface_scene.hpp>
 
 #include <array>
 #include <atomic>
@@ -70,6 +71,7 @@ namespace {
 namespace vk = pwm::vulkanpp;
 namespace scene = pwm::scene;
 namespace render = pwm::render;
+namespace wayland = pwm::wayland;
 
 constexpr pwm::u32 width_px = 320;
 constexpr pwm::u32 height_px = 180;
@@ -328,6 +330,94 @@ auto run_golden_test() -> int {
     return EXIT_SUCCESS;
 }
 
+auto run_surface_scene_test() -> int {
+    fixture context;
+    auto fixture_result = create_fixture(context);
+    if (!fixture_result) {
+        std::println(stderr, "render fixture unavailable: {}", fixture_result.error().message);
+        return 77;
+    }
+
+    wayland::surface_scene surfaces{context.device.value(), width_px, height_px};
+    constexpr pwm::u32 surface_width = 16;
+    constexpr pwm::u32 surface_height = 16;
+    constexpr pwm::u32 surface_stride = surface_width * 4;
+    std::vector<std::byte> pixels(surface_stride * surface_height);
+    for (pwm::usize index = 0; index < pixels.size(); index += 4) {
+        pixels[index] = std::byte{0x00};
+        pixels[index + 1] = std::byte{0x00};
+        pixels[index + 2] = std::byte{0xFF};
+        pixels[index + 3] = std::byte{0xFF};
+    }
+
+    const wayland::surface_commit_event commit{
+        .surface = 1,
+        .buffer = 2,
+        .width = surface_width,
+        .height = surface_height,
+        .stride = surface_stride,
+        .format = 0,
+        .pixels = pixels,
+    };
+    if (auto committed = surfaces.on_commit(commit); !committed) {
+        std::println(stderr, "surface commit failed: {}", committed.error().message);
+        return EXIT_FAILURE;
+    }
+
+    const vk::color clear{.red = 0.05F, .green = 0.06F, .blue = 0.08F, .alpha = 1.0F};
+    const vk::color background{.red = 0.03F, .green = 0.04F, .blue = 0.06F, .alpha = 1.0F};
+    const auto draw = [&]() -> bool {
+        auto rendered =
+            context.renderer->render(context.target->native_image(), width_px, height_px,
+                                     surfaces.scene_graph().root(), surfaces.textures(), {}, clear);
+        if (!rendered) {
+            return false;
+        }
+        auto downloaded = context.target->download();
+        return static_cast<bool>(downloaded);
+    };
+
+    if (!draw()) {
+        std::println(stderr, "surface render failed");
+        return EXIT_FAILURE;
+    }
+    bool ok =
+        check_pixel(context.target.value(), 35, 35,
+                    {.red = 1.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F}, "surface texture");
+    ok &= check_pixel(context.target.value(), 2, 2, background, "surface background");
+
+    for (pwm::usize index = 0; index < pixels.size(); index += 4) {
+        pixels[index] = std::byte{0x00};
+        pixels[index + 1] = std::byte{0xFF};
+        pixels[index + 2] = std::byte{0x00};
+    }
+    if (auto updated = surfaces.on_commit(commit); !updated) {
+        return EXIT_FAILURE;
+    }
+    if (!draw()) {
+        return EXIT_FAILURE;
+    }
+    ok &= check_pixel(context.target.value(), 35, 35,
+                      {.red = 0.0F, .green = 1.0F, .blue = 0.0F, .alpha = 1.0F},
+                      "surface texture update");
+
+    if (auto moved = surfaces.set_surface_bounds(1, {100, 100, 16, 16}); !moved) {
+        return EXIT_FAILURE;
+    }
+    if (!draw()) {
+        return EXIT_FAILURE;
+    }
+    ok &= check_pixel(context.target.value(), 105, 105,
+                      {.red = 0.0F, .green = 1.0F, .blue = 0.0F, .alpha = 1.0F}, "surface moved");
+    ok &= check_pixel(context.target.value(), 35, 35, background, "surface old position");
+
+    if (!ok) {
+        return EXIT_FAILURE;
+    }
+    std::println("surface scene test passed");
+    return EXIT_SUCCESS;
+}
+
 auto run_allocation_test() -> int {
 #if defined(__SANITIZE_ADDRESS__)
     std::println("steady-state allocation test skipped under AddressSanitizer");
@@ -449,6 +539,10 @@ int main() {
     const int golden = run_golden_test();
     if (golden != EXIT_SUCCESS) {
         return golden;
+    }
+    const int surface_scene = run_surface_scene_test();
+    if (surface_scene != EXIT_SUCCESS) {
+        return surface_scene;
     }
     const int allocation = run_allocation_test();
     if (allocation != EXIT_SUCCESS) {

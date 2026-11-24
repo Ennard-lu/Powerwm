@@ -19,11 +19,16 @@ struct staging_buffer {
     void* mapped = nullptr;
 };
 
-auto create_image_handle(VkDevice device, u32 width_px, u32 height_px) -> result<VkImage> {
+auto to_vk_format(texture_format format) -> VkFormat {
+    return format == texture_format::bgra8 ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8G8B8A8_UNORM;
+}
+
+auto create_image_handle(VkDevice device, u32 width_px, u32 height_px, VkFormat format)
+    -> result<VkImage> {
     VkImageCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     create_info.imageType = VK_IMAGE_TYPE_2D;
-    create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+    create_info.format = format;
     create_info.extent = {width_px, height_px, 1};
     create_info.mipLevels = 1;
     create_info.arrayLayers = 1;
@@ -76,12 +81,12 @@ auto allocate_image_memory(const device& device, VkImage image) -> result<void*>
     return reinterpret_cast<void*>(memory);
 }
 
-auto create_view(VkDevice device, VkImage image) -> result<VkImageView> {
+auto create_view(VkDevice device, VkImage image, VkFormat format) -> result<VkImageView> {
     VkImageViewCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     create_info.image = image;
     create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+    create_info.format = format;
     create_info.subresourceRange = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
         .baseMipLevel = 0,
@@ -213,7 +218,7 @@ auto record_transition(VkCommandBuffer command, VkImage image, VkImageLayout old
 }
 
 auto record_upload(VkCommandBuffer command, VkImage image, VkBuffer staging, bool initialized,
-                   u32 width_px, u32 height_px) -> void {
+                   u32 width_px, u32 height_px, u32 stride_bytes) -> void {
     record_transition(command, image,
                       initialized ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                                   : VK_IMAGE_LAYOUT_UNDEFINED,
@@ -227,6 +232,7 @@ auto record_upload(VkCommandBuffer command, VkImage image, VkBuffer staging, boo
         .layerCount = 1,
     };
     copy_region.imageExtent = {width_px, height_px, 1};
+    copy_region.bufferRowLength = stride_bytes / 4;
     vkCmdCopyBufferToImage(command, staging, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                            &copy_region);
     record_transition(command, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -234,17 +240,21 @@ auto record_upload(VkCommandBuffer command, VkImage image, VkBuffer staging, boo
 }
 
 auto upload_pixels(const device& device, void* image_handle, bool initialized, u32 width_px,
-                   u32 height_px, std::span<const std::byte> rgba8) -> result<void> {
-    constexpr VkDeviceSize pixel_bytes = 4;
+                   u32 height_px, const texture_data& data) -> result<void> {
+    if (data.stride_bytes < width_px * 4 || data.stride_bytes % 4 != 0 ||
+        data.pixels.size() < static_cast<usize>(data.stride_bytes) * height_px) {
+        return std::unexpected(
+            make_error(error_code::invalid_argument, "texture stride or size is invalid"));
+    }
     const VkDeviceSize size_bytes =
-        static_cast<VkDeviceSize>(width_px) * height_px * static_cast<VkDeviceSize>(pixel_bytes);
+        static_cast<VkDeviceSize>(data.stride_bytes) * static_cast<VkDeviceSize>(height_px);
 
     auto staging_result = create_staging(device, size_bytes);
     if (!staging_result) {
         return std::unexpected(staging_result.error());
     }
     staging_buffer staging = *staging_result;
-    std::memcpy(staging.mapped, rgba8.data(), static_cast<usize>(size_bytes));
+    std::memcpy(staging.mapped, data.pixels.data(), static_cast<usize>(size_bytes));
 
     auto pool_result = create_command_pool(device);
     if (!pool_result) {
@@ -278,7 +288,7 @@ auto upload_pixels(const device& device, void* image_handle, bool initialized, u
 
     record_upload(reinterpret_cast<VkCommandBuffer>(command->native_handle()),
                   reinterpret_cast<VkImage>(image_handle), staging.buffer, initialized, width_px,
-                  height_px);
+                  height_px, data.stride_bytes);
 
     if (auto ended = command->end(); !ended) {
         destroy_staging(device, staging);
@@ -300,18 +310,20 @@ auto upload_pixels(const device& device, void* image_handle, bool initialized, u
 }
 
 auto create_texture(const device& device, u32 width_px, u32 height_px,
-                    std::span<const std::byte> rgba8) noexcept -> result<texture> {
+                    const texture_data& data) noexcept -> result<texture> {
     if (width_px == 0 || height_px == 0) {
         return std::unexpected(
             make_error(error_code::invalid_argument, "texture size must be non-zero"));
     }
-    if (rgba8.size() != static_cast<usize>(width_px) * height_px * 4) {
+    if (data.stride_bytes < width_px * 4 || data.stride_bytes % 4 != 0 ||
+        data.pixels.size() < static_cast<usize>(data.stride_bytes) * height_px) {
         return std::unexpected(
             make_error(error_code::invalid_argument, "texture pixel size does not match"));
     }
 
     const VkDevice native_device = reinterpret_cast<VkDevice>(device.native_handle());
-    auto image_result = create_image_handle(native_device, width_px, height_px);
+    auto image_result =
+        create_image_handle(native_device, width_px, height_px, to_vk_format(data.format));
     if (!image_result) {
         return std::unexpected(image_result.error());
     }
@@ -323,7 +335,7 @@ auto create_texture(const device& device, u32 width_px, u32 height_px,
         return std::unexpected(memory_result.error());
     }
 
-    auto view_result = create_view(native_device, image);
+    auto view_result = create_view(native_device, image, to_vk_format(data.format));
     if (!view_result) {
         vkFreeMemory(native_device, reinterpret_cast<VkDeviceMemory>(*memory_result), nullptr);
         vkDestroyImage(native_device, image, nullptr);
@@ -338,9 +350,9 @@ auto create_texture(const device& device, u32 width_px, u32 height_px,
         return std::unexpected(sampler_result.error());
     }
 
-    texture result{&device,         image, *memory_result, *view_result,
-                   *sampler_result, false, width_px,       height_px};
-    if (auto uploaded = result.update(rgba8); !uploaded) {
+    texture result{&device, image,    *memory_result, *view_result, *sampler_result,
+                   false,   width_px, height_px,      data.format};
+    if (auto uploaded = result.update(data); !uploaded) {
         result.destroy();
         return std::unexpected(uploaded.error());
     }
@@ -368,12 +380,25 @@ auto texture::native_sampler() const noexcept -> void* {
     return sampler_;
 }
 
+auto create_texture(const device& device, u32 width_px, u32 height_px,
+                    std::span<const std::byte> rgba8) noexcept -> result<texture> {
+    return create_texture(device, width_px, height_px,
+                          texture_data{.pixels = rgba8,
+                                       .stride_bytes = width_px * 4,
+                                       .format = texture_format::rgba8});
+}
+
 auto texture::update(std::span<const std::byte> rgba8) noexcept -> result<void> {
-    if (rgba8.size() != static_cast<usize>(width_px_) * height_px_ * 4) {
+    return update(texture_data{
+        .pixels = rgba8, .stride_bytes = width_px_ * 4, .format = texture_format::rgba8});
+}
+
+auto texture::update(const texture_data& data) noexcept -> result<void> {
+    if (data.format != format_) {
         return std::unexpected(
-            make_error(error_code::invalid_argument, "texture pixel size does not match"));
+            make_error(error_code::invalid_argument, "texture format cannot change"));
     }
-    return upload_pixels(*device_, image_, initialized_, width_px_, height_px_, rgba8);
+    return upload_pixels(*device_, image_, initialized_, width_px_, height_px_, data);
 }
 
 auto texture::destroy() const noexcept -> void {
