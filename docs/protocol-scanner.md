@@ -127,7 +127,14 @@ messages from the byte stream and routes them through the object table.
 - `wl_seat` emits capabilities/name and creates pointer, keyboard, and touch objects;
 - shm pools are mmap'd; surface commit invokes a pixel callback with the current buffer
   view, ready for texture upload;
-- Vulkan texture upload and scene rendering are the next integration step.
+- Vulkan texture upload and scene nodes are implemented in `wayland/surface_scene.hpp`;
+  KMS presentation of protocol surfaces is the next integration step.
 
-Client-id lifetime, compositor/surface objects, coroutine sessions, and real external
-clients are the next Phase 3 steps.
+`powerwm_wayland_server <socket-path> <seconds>` runs the protocol stack on the project
+event loop. It advertises compositor, shm, output, seat, and xdg-shell globals, accepts
+clients, dispatches requests, and logs committed surface buffers. A raw wire client can
+connect to validate `wl_registry`, `wl_display.sync`, and global discovery without
+`libwayland`.
+
+Client-id lifetime, coroutine sessions, input event delivery, and rendering the protocol
+scene through KMS are the next Phase 3 steps.

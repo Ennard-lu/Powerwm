@@ -209,6 +209,9 @@ if(POWERWM_BUILD_BRINGUP_TOOL)
     )
     add_dependencies(powerwm_render_benchmark powerwm_shaders)
 
+    add_executable(powerwm_wayland_server tools/wayland_server.cpp)
+    target_link_libraries(powerwm_wayland_server PRIVATE powerwm_wayland)
+
     add_executable(powerwm_vulkan_compositor tools/vulkan_compositor.cpp)
     target_link_libraries(powerwm_vulkan_compositor PRIVATE powerwm_vulkanpp powerwm_seat)
     target_compile_definitions(powerwm_vulkan_compositor PRIVATE

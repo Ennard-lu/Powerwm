@@ -168,6 +168,7 @@ libwayland.
   pointer/keyboard/touch object creation;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;
+- [x] in-tree socket handshake and raw-wire client verification;
 - [ ] real external client handshake and wire fuzzing.
 
 Exit: handshake with real libwayland clients; fd stress test; protocol errors do not

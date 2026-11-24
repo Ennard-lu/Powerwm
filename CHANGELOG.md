@@ -57,6 +57,10 @@ pre-1.0 `0.x.y` convention.
   surface commit callback with validated buffer dimensions/stride/format.
 - Phase 3 output/seat: `wl_output` geometry/mode/scale/name/description events and
   `wl_seat` pointer/keyboard/touch object creation.
+- `powerwm_wayland_server`: event-loop Unix socket server with core globals, registry,
+  sync, shm surfaces, xdg-shell, output, and seat objects; verified with a raw wire client.
+- Surface-scene bridge: shm commits upload strided BGRA/RGBA textures into scene nodes
+  and render through the Vulkan scene renderer.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
   `powerwm_input_probe`, `powerwm_seat_probe`, `powerwm_vulkan_pipeline_probe`.
 
