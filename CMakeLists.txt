@@ -19,6 +19,7 @@ find_package(Libdrm REQUIRED)
 add_library(powerwm_core STATIC
     src/base/fatal.cpp
     src/platform/drm/device.cpp
+    src/platform/event/poll.cpp
     src/platform/drm/lookup.cpp
 )
 

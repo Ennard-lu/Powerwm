@@ -126,7 +126,7 @@ powerwm/
 │   ├── platform/
 │   │   ├── drm/                 # device / atomic_request / buffers / lookup
 │   │   ├── gbm/                 # 早期 GBM 封装（Vulkan 落地后评估移除）
-│   │   ├── event/               # 目标：epoll/timerfd/signalfd 封装
+│   │   ├── event/               # poll 等待；epoll/timerfd/signalfd 封装
 │   │   ├── socket/              # 目标：socket/recvmsg/sendmsg/SCM_RIGHTS
 │   │   ├── input/               # 目标：libinput
 │   │   ├── seat/                # 目标：libseat/logind
@@ -188,6 +188,8 @@ powerwm/
 │  └─ IPC socket：控制请求                                              │
 └────────────────────────────────────────────────────────────────────────┘
 ```
+
+当前 Phase 1 使用 `platform/event` 的 `poll` 封装等待 DRM page flip；完整的 epoll 协程调度器在 Phase 2/3 实现。
 
 **不变量**
 

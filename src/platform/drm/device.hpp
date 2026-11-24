@@ -23,6 +23,8 @@
 namespace pwm::platform::drm {
 
 inline constexpr u32 atomic_allow_modeset = DRM_MODE_ATOMIC_ALLOW_MODESET;
+inline constexpr u32 atomic_nonblock = DRM_MODE_ATOMIC_NONBLOCK;
+inline constexpr u32 atomic_page_flip_event = DRM_MODE_PAGE_FLIP_EVENT;
 
 namespace fs = std::filesystem;
 
@@ -92,6 +94,10 @@ struct connector {
 
     [[nodiscard]] auto valid() const noexcept -> bool {
         return handle != nullptr;
+    }
+
+    [[nodiscard]] auto is_connected() const noexcept -> bool {
+        return handle->connection == DRM_MODE_CONNECTED;
     }
 
     [[nodiscard]] auto mode_count() const noexcept -> u32 {
@@ -233,6 +239,13 @@ struct plane_set {
     }
 };
 
+struct output_target {
+    u32 crtc_id = 0;
+    u32 connector_id = 0;
+    u32 plane_id = 0;
+    display_mode mode{};
+};
+
 struct mapped_memory {
     void* address = MAP_FAILED;
     usize size_bytes = 0;
@@ -369,6 +382,10 @@ class device {
     [[nodiscard]] auto get_crtc(u32 crtc_id) const noexcept -> crtc;
 
     [[nodiscard]] auto get_connector(u32 connector_id) const noexcept -> connector;
+
+    [[nodiscard]] auto find_primary_output() const noexcept -> result<output_target>;
+
+    [[nodiscard]] auto wait_for_page_flip(i32 timeout_ms) const noexcept -> result<void>;
 
     /// Creates a dumb buffer owned by this device. The device must outlive the buffer.
     [[nodiscard]] auto create_dumb_buffer(const buffer_format& format) const noexcept

@@ -7,26 +7,18 @@
 #include <platform/drm/lookup.hpp>
 #include <platform/drm/properties.hpp>
 
-#include <chrono>
-#include <cmath>
 #include <cstdlib>
 #include <print>
-#include <span>
-#include <thread>
 #include <utility>
 
 namespace {
 
 namespace drm = pwm::platform::drm;
 
-using namespace std::chrono_literals;
-
-struct output_selection {
-    pwm::u32 crtc_id;
-    pwm::u32 connector_id;
-    pwm::u32 width_px;
-    pwm::u32 height_px;
-    drm::display_mode mode;
+struct output_properties {
+    drm::prop::id::crtc crtc;
+    drm::prop::id::connector connector;
+    drm::prop::id::plane plane;
 };
 
 auto require_value(pwm::result<void>&& value) -> void {
@@ -56,35 +48,10 @@ auto enable_atomic_features(drm::device& device) -> void {
     require_value(device.set_universal_planes_enabled(true));
 }
 
-auto select_output(drm::device& device) -> output_selection {
-    auto resources = pwm::raii{device.get_resources()};
-    if (!resources->valid() || resources->crtc_ids().empty() ||
-        resources->connector_ids().empty()) {
-        pwm::terminate_with_message("DRM device has no usable CRTC or connector");
-    }
-
-    for (const pwm::u32 connector_id : resources->connector_ids()) {
-        auto connector = pwm::raii{device.get_connector(connector_id)};
-        if (!connector->valid() || connector->mode_count() == 0) {
-            continue;
-        }
-        const drm::display_mode mode = connector->mode(0);
-        return {
-            .crtc_id = resources->crtc_ids().front(),
-            .connector_id = connector_id,
-            .width_px = mode.width_px(),
-            .height_px = mode.height_px(),
-            .mode = mode,
-        };
-    }
-
-    pwm::terminate_with_message("DRM device has no connected output");
-}
-
-auto make_buffer_format(const output_selection& output) -> drm::buffer_format {
+auto make_buffer_format(const drm::output_target& output) -> drm::buffer_format {
     return {
-        .width_px = output.width_px,
-        .height_px = output.height_px,
+        .width_px = output.mode.width_px(),
+        .height_px = output.mode.height_px(),
         .pitch_bytes = 0,
         .depth_bits = 24,
         .bpp = 32,
@@ -103,20 +70,6 @@ auto map_buffer(const drm::dumb_buffer& buffer) -> pwm::raii<drm::mapped_memory>
     return pwm::raii{std::move(mapped)};
 }
 
-auto fill_test_pattern(drm::mapped_memory& memory, const drm::buffer_format& format) -> void {
-    auto* pixels = static_cast<pwm::u32*>(memory.address);
-    const pwm::usize row_stride = format.pitch_bytes / sizeof(pwm::u32);
-    const pwm::i64 center_x = static_cast<pwm::i64>(format.width_px) / 2;
-
-    for (pwm::u32 y = 0; y < format.height_px; ++y) {
-        auto* row = pixels + static_cast<pwm::usize>(y) * row_stride;
-        for (pwm::u32 x = 0; x < format.width_px; ++x) {
-            const pwm::i64 distance = std::abs(static_cast<pwm::i64>(x) - center_x);
-            row[x] = distance < static_cast<pwm::i64>(y) ? 0xFFFFFF : 0x000000;
-        }
-    }
-}
-
 auto create_framebuffer(drm::device& device, const drm::dumb_buffer& buffer)
     -> pwm::raii<drm::framebuffer> {
     auto framebuffer = require_value(device.create_framebuffer(buffer));
@@ -129,6 +82,39 @@ auto create_mode_blob(drm::device& device, const drm::display_mode& mode)
     return pwm::raii{std::move(blob)};
 }
 
+auto lookup_output_properties(drm::device& device, const drm::output_target& output)
+    -> output_properties {
+    auto crtc_properties = pwm::raii{device.get_crtc_properties(output.crtc_id)};
+    auto connector_properties = pwm::raii{device.get_connector_properties(output.connector_id)};
+    auto plane_properties = pwm::raii{device.get_plane_properties(output.plane_id)};
+
+    if (!crtc_properties->valid() || !connector_properties->valid() || !plane_properties->valid()) {
+        pwm::terminate_with_message("failed to query DRM properties");
+    }
+
+    return {
+        .crtc = drm::lookup_property_ids<drm::prop::id::crtc>(device, crtc_properties.value()),
+        .connector = drm::lookup_property_ids<drm::prop::id::connector>(
+            device, connector_properties.value()),
+        .plane = drm::lookup_property_ids<drm::prop::id::plane>(device, plane_properties.value()),
+    };
+}
+
+auto fill_animation_frame(drm::mapped_memory& memory, const drm::buffer_format& format,
+                          pwm::u32 frame) -> void {
+    auto* pixels = static_cast<pwm::u32*>(memory.address);
+    const pwm::usize row_stride = format.pitch_bytes / sizeof(pwm::u32);
+
+    for (pwm::u32 y = 0; y < format.height_px; ++y) {
+        auto* row = pixels + static_cast<pwm::usize>(y) * row_stride;
+        const pwm::u32 green = (y + frame * 4) & 0xFF;
+        for (pwm::u32 x = 0; x < format.width_px; ++x) {
+            const pwm::u32 red = (x + frame * 2) & 0xFF;
+            row[x] = (red << 16) | (green << 8) | 0x40;
+        }
+    }
+}
+
 auto add_required_property(drm::atomic_request& request, pwm::u32 object_id, pwm::u32 property_id,
                            pwm::u64 value) -> void {
     if (!request.add_property(object_id, property_id, value)) {
@@ -136,71 +122,84 @@ auto add_required_property(drm::atomic_request& request, pwm::u32 object_id, pwm
     }
 }
 
-auto add_crtc_and_connector_properties(drm::device& device, const output_selection& output,
-                                       const drm::property_blob& blob, drm::atomic_request& request)
-    -> void {
-    auto crtc_properties = pwm::raii{device.get_crtc_properties(output.crtc_id)};
-    auto connector_properties = pwm::raii{device.get_connector_properties(output.connector_id)};
-
-    const auto crtc_ids =
-        drm::lookup_property_ids<drm::prop::id::crtc>(device, crtc_properties.value());
-    const auto connector_ids =
-        drm::lookup_property_ids<drm::prop::id::connector>(device, connector_properties.value());
-
-    add_required_property(request, output.crtc_id, crtc_ids.active, 1);
-    add_required_property(request, output.crtc_id, crtc_ids.mode_id, blob.id());
-    add_required_property(request, output.connector_id, connector_ids.crtc_id, output.crtc_id);
+auto add_crtc_and_connector_properties(const drm::output_target& output,
+                                       const output_properties& ids, const drm::property_blob& blob,
+                                       drm::atomic_request& request) -> void {
+    add_required_property(request, output.crtc_id, ids.crtc.active, 1);
+    add_required_property(request, output.crtc_id, ids.crtc.mode_id, blob.id());
+    add_required_property(request, output.connector_id, ids.connector.crtc_id, output.crtc_id);
 }
 
-auto add_plane_properties(drm::device& device, const output_selection& output,
+auto add_plane_properties(const drm::output_target& output, const output_properties& ids,
                           const drm::framebuffer& framebuffer, drm::atomic_request& request)
     -> void {
-    auto planes = pwm::raii{device.get_plane_resources()};
-    if (!planes->valid() || planes->plane_ids().empty()) {
-        pwm::terminate_with_message("DRM device has no usable plane");
-    }
-
-    const pwm::u32 plane_id = planes->plane_ids().front();
-    auto plane_properties = pwm::raii{device.get_plane_properties(plane_id)};
-    const auto plane_ids =
-        drm::lookup_property_ids<drm::prop::id::plane>(device, plane_properties.value());
-
-    add_required_property(request, plane_id, plane_ids.crtc_id, output.crtc_id);
-    add_required_property(request, plane_id, plane_ids.fb_id, framebuffer.id());
-    add_required_property(request, plane_id, plane_ids.crtc_x, 0);
-    add_required_property(request, plane_id, plane_ids.crtc_y, 0);
-    add_required_property(request, plane_id, plane_ids.crtc_w, output.width_px);
-    add_required_property(request, plane_id, plane_ids.crtc_h, output.height_px);
-    add_required_property(request, plane_id, plane_ids.src_x, 0);
-    add_required_property(request, plane_id, plane_ids.src_y, 0);
-    add_required_property(request, plane_id, plane_ids.src_w, output.width_px << 16);
-    add_required_property(request, plane_id, plane_ids.src_h, output.height_px << 16);
+    add_required_property(request, output.plane_id, ids.plane.crtc_id, output.crtc_id);
+    add_required_property(request, output.plane_id, ids.plane.fb_id, framebuffer.id());
+    add_required_property(request, output.plane_id, ids.plane.crtc_x, 0);
+    add_required_property(request, output.plane_id, ids.plane.crtc_y, 0);
+    add_required_property(request, output.plane_id, ids.plane.crtc_w, output.mode.width_px());
+    add_required_property(request, output.plane_id, ids.plane.crtc_h, output.mode.height_px());
+    add_required_property(request, output.plane_id, ids.plane.src_x, 0);
+    add_required_property(request, output.plane_id, ids.plane.src_y, 0);
+    add_required_property(request, output.plane_id, ids.plane.src_w, output.mode.width_px() << 16);
+    add_required_property(request, output.plane_id, ids.plane.src_h, output.mode.height_px() << 16);
 }
 
-auto commit_test_frame(drm::device& device, const output_selection& output,
-                       const drm::framebuffer& framebuffer, const drm::property_blob& blob)
-    -> void {
+auto commit_frame(drm::device& device, const drm::output_target& output,
+                  const output_properties& ids, const drm::framebuffer& framebuffer,
+                  const drm::property_blob& blob, bool allow_modeset) -> void {
     auto request = pwm::raii{require_value(drm::atomic_request::create())};
-    add_crtc_and_connector_properties(device, output, blob, request.value());
-    add_plane_properties(device, output, framebuffer, request.value());
-    require_value(device.commit_atomic(request.value(), drm::atomic_allow_modeset));
+    add_crtc_and_connector_properties(output, ids, blob, request.value());
+    add_plane_properties(output, ids, framebuffer, request.value());
+
+    pwm::u32 flags = drm::atomic_page_flip_event | drm::atomic_nonblock;
+    if (allow_modeset) {
+        flags |= drm::atomic_allow_modeset;
+    }
+    require_value(device.commit_atomic(request.value(), flags));
+}
+
+auto render_frames(drm::device& device, const drm::output_target& output,
+                   const output_properties& ids, const drm::property_blob& blob,
+                   const drm::framebuffer& first, const drm::framebuffer& second,
+                   drm::mapped_memory& first_memory, drm::mapped_memory& second_memory,
+                   const drm::buffer_format& format) -> void {
+    constexpr pwm::u32 frame_count = 180;
+
+    fill_animation_frame(first_memory, format, 0);
+    commit_frame(device, output, ids, first, blob, true);
+    require_value(device.wait_for_page_flip(1000));
+
+    for (pwm::u32 frame = 0; frame < frame_count; ++frame) {
+        const bool use_first = frame % 2 != 0;
+        auto& memory = use_first ? first_memory : second_memory;
+        const auto& framebuffer = use_first ? first : second;
+        fill_animation_frame(memory, format, frame + 1);
+        commit_frame(device, output, ids, framebuffer, blob, false);
+        require_value(device.wait_for_page_flip(1000));
+    }
 }
 
 auto run_drm_bringup() -> int {
     auto device = open_drm_device();
     enable_atomic_features(device.value());
 
-    const output_selection output = select_output(device.value());
+    const drm::output_target output = require_value(device->find_primary_output());
     const drm::buffer_format format = make_buffer_format(output);
-    auto buffer = create_buffer(device.value(), format);
-    auto memory = map_buffer(buffer.value());
-    fill_test_pattern(memory.value(), buffer.value().format());
 
-    auto framebuffer = create_framebuffer(device.value(), buffer.value());
+    auto first_buffer = create_buffer(device.value(), format);
+    auto second_buffer = create_buffer(device.value(), format);
+    auto first_memory = map_buffer(first_buffer.value());
+    auto second_memory = map_buffer(second_buffer.value());
+    auto first_framebuffer = create_framebuffer(device.value(), first_buffer.value());
+    auto second_framebuffer = create_framebuffer(device.value(), second_buffer.value());
     auto blob = create_mode_blob(device.value(), output.mode);
+    const output_properties ids = lookup_output_properties(device.value(), output);
 
-    commit_test_frame(device.value(), output, framebuffer.value(), blob.value());
-    std::this_thread::sleep_for(3s);
+    render_frames(device.value(), output, ids, blob.value(), first_framebuffer.value(),
+                  second_framebuffer.value(), first_memory.value(), second_memory.value(),
+                  first_buffer.value().format());
+
     require_value(device->drop_master());
     return EXIT_SUCCESS;
 }

@@ -6,7 +6,7 @@
 [![CI](https://github.com/Ennard-lu/Powerwm/actions/workflows/ci.yml/badge.svg)](https://github.com/Ennard-lu/Powerwm/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status: Phase 0 (foundation) · early prototype · not usable as a daily desktop**
+**Status: Phase 1 (ignition) · early prototype · not usable as a daily desktop**
 
 ## Why powerwm
 
@@ -46,9 +46,10 @@ The repository currently contains the Phase 0 foundation and a DRM/KMS bring-up 
 - `src/base/` — `result`, `raii`, fatal handling, fixed-width integers, macros.
 - `src/platform/drm/` — libdrm wrappers: `device`, `atomic_request`, `dumb_buffer`,
   `framebuffer`, property lookup, display modes.
+- `src/platform/event/` — poll-based event waiting used by the DRM page-flip loop.
 - `src/platform/gbm/` — early libgbm wrapper; will be evaluated after the Vulkan backend lands.
 - `src/app/main.cpp` — application skeleton; prints version/help and never touches DRM.
-- `tools/drm_bringup.cpp` — standalone DRM/KMS modesetting demo.
+- `tools/drm_bringup.cpp` — DRM/KMS modesetting demo with double-buffered page-flip animation.
 - `tests/unit/` — CTest smoke tests for `result` and `raii`.
 
 The Wayland protocol engine, Vulkan renderer, scene graph, and window manager are not
@@ -117,8 +118,8 @@ not know about `wm`; `wm` does not know the rendering backend. See
 
 | Phase | Codename | Goal | Status |
 | --- | --- | --- | --- |
-| P0 | Foundation | Engineering, CI, base/platform split, test and policy gates | **in progress** |
-| P1 | Ignition | Stable DRM/KMS output, page flip, VT switch, hotplug | pending |
+| P0 | Foundation | Engineering, CI, base/platform split, test and policy gates | mostly complete |
+| P1 | Ignition | Stable DRM/KMS output, page flip, VT switch, hotplug | **in progress** |
 | P2 | Canvas | Vulkan renderer, scene graph, DMA-BUF, damage tracking | pending |
 | P3 | Language | In-tree Wayland wire protocol, coroutine engine, core protocols | pending |
 | P4 | Order | Tiling layouts, workspaces, focus, keybindings, IPC | pending |

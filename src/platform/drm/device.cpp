@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <base/raii.hpp>
 #include <platform/drm/device.hpp>
+#include <platform/event/poll.hpp>
 
 namespace pwm::platform::drm {
 
@@ -84,6 +86,33 @@ auto device::get_connector(u32 connector_id) const noexcept -> connector {
     return connector::wrap(drmModeGetConnector(fd_handle_, connector_id));
 }
 
+auto device::find_primary_output() const noexcept -> result<output_target> {
+    auto resources = raii{get_resources()};
+    if (!resources->valid() || resources->crtc_ids().empty()) {
+        return std::unexpected(make_error(error_code::not_found, "no DRM CRTC available"));
+    }
+
+    auto planes = raii{get_plane_resources()};
+    if (!planes->valid() || planes->plane_ids().empty()) {
+        return std::unexpected(make_error(error_code::not_found, "no DRM plane available"));
+    }
+
+    for (const u32 connector_id : resources->connector_ids()) {
+        auto connector = raii{get_connector(connector_id)};
+        if (!connector->valid() || !connector->is_connected() || connector->mode_count() == 0) {
+            continue;
+        }
+        return output_target{
+            .crtc_id = resources->crtc_ids().front(),
+            .connector_id = connector_id,
+            .plane_id = planes->plane_ids().front(),
+            .mode = connector->mode(0),
+        };
+    }
+
+    return std::unexpected(make_error(error_code::not_found, "no connected DRM output"));
+}
+
 auto device::create_dumb_buffer(const buffer_format& format) const noexcept -> result<dumb_buffer> {
     drm_mode_create_dumb create_info{
         .height = format.height_px,
@@ -127,6 +156,35 @@ auto device::create_property_blob(std::span<const std::byte> data) const noexcep
         return std::unexpected(make_error(error_code::io, "drmModeCreatePropertyBlob failed"));
     }
     return property_blob{fd_handle_, id};
+}
+
+namespace {
+
+auto mark_page_flip(int, unsigned int, unsigned int, unsigned int, void* user_data) -> void {
+    *static_cast<bool*>(user_data) = true;
+}
+
+}
+
+auto device::wait_for_page_flip(i32 timeout_ms) const noexcept -> result<void> {
+    bool completed = false;
+    drmEventContext context{};
+    context.version = DRM_EVENT_CONTEXT_VERSION;
+    context.page_flip_handler = mark_page_flip;
+
+    while (!completed) {
+        auto readable = event::wait_readable(fd_handle_, timeout_ms);
+        if (!readable) {
+            return std::unexpected(readable.error());
+        }
+        if (!*readable) {
+            return std::unexpected(make_error(error_code::io, "page flip timed out"));
+        }
+        if (drmHandleEvent(fd_handle_, &context) != 0) {
+            return std::unexpected(make_error(error_code::io, "drmHandleEvent failed"));
+        }
+    }
+    return {};
 }
 
 auto device::destroy() const noexcept -> void {

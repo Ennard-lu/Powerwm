@@ -2,7 +2,7 @@
 
 > 一个直接运行在 Linux DRM/KMS 之上、使用现代 C++ 从零构建的 Wayland 合成器与平铺窗口管理器。
 
-**状态：Phase 0（地基）· 早期原型 · 尚不可日常使用**
+**状态：Phase 1（点亮）· 早期原型 · 尚不可日常使用**
 **许可证：Apache-2.0**
 
 powerwm 的目标不是再做一个配置层，而是构建一条完整、可控、可测量的图形栈：
@@ -40,10 +40,11 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 当前代码是一个 **DRM/KMS 点灯原型**，用于验证工具链与底层封装，不是窗口管理器：
 
 - `src/base/`：`result`、`raii`、`fatal`、定宽整数、宏等基础设施，命名空间 `pwm`。
-- `src/platform/drm/`：`libdrm` 封装（`device`、`atomic_request`、`dumb_buffer`、`framebuffer`、属性查找）。
+- `src/platform/drm/`：`libdrm` 封装（`device`、`atomic_request`、`dumb_buffer`、`framebuffer`、属性查找、page flip）。
+- `src/platform/event/`：基于 `poll` 的事件等待，用于 page flip 循环。
 - `src/platform/gbm/`：早期 `libgbm` 封装，Vulkan 后端落地后评估移除。
 - `src/app/main.cpp`：应用骨架，无参数时打印版本与帮助，不触碰 DRM。
-- `tools/drm_bringup.cpp`：DRM/KMS 点灯工具，打开 `/dev/dri/card1` 并做一次原子 modeset。
+- `tools/drm_bringup.cpp`：DRM/KMS 点灯工具，双缓冲 + page flip 动画。
 - CMake 目标：`powerwm_core`（静态库）、`powerwm`（应用）、`powerwm_drm_bringup`（工具）、`powerwm_tests`。
 - 当前构建已启用 `-fno-exceptions`；Vulkan 渲染栈与自研 Wayland 协议栈尚未接入，属于 Phase 2/3。
 
@@ -180,7 +181,7 @@ flowchart TB
 | 阶段 | 代号 | 目标 | 状态 |
 | --- | --- | --- | --- |
 | P0 | 地基 | 工程化、CI、目录重构、测试骨架、ADR | **进行中** |
-| P1 | 点亮 | DRM/KMS 稳定出图、page flip、VT 切换、热插拔 | 待开始 |
+| P1 | 点亮 | DRM/KMS 稳定出图、page flip、VT 切换、热插拔 | **进行中** |
 | P2 | 画布 | Vulkan/vulkanpp 渲染器、场景图、DMA-BUF、损坏跟踪 | 待开始 |
 | P3 | 语言 | 自研 Wayland wire protocol、协程协议引擎、xdg-shell、输入、剪贴板 | 待开始 |
 | P4 | 秩序 | 平铺布局、工作区、焦点、键位、IPC | 待开始 |
