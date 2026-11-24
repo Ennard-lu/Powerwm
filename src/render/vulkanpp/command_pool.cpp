@@ -32,9 +32,6 @@ auto command_pool::native_handle() const noexcept -> void* {
 }
 
 auto command_pool::allocate() noexcept -> result<command_buffer> {
-    if (!valid()) {
-        return std::unexpected(make_error(error_code::invalid_argument, "command pool is invalid"));
-    }
 
     VkCommandBufferAllocateInfo allocate_info{};
     allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -54,10 +51,8 @@ auto command_pool::allocate() noexcept -> result<command_buffer> {
 }
 
 auto command_pool::destroy() const noexcept -> void {
-    if (handle_ != nullptr) {
-        vkDestroyCommandPool(reinterpret_cast<VkDevice>(device_),
-                             reinterpret_cast<VkCommandPool>(handle_), nullptr);
-    }
+    vkDestroyCommandPool(reinterpret_cast<VkDevice>(device_),
+                         reinterpret_cast<VkCommandPool>(handle_), nullptr);
     handle_ = nullptr;
 }
 
@@ -95,11 +90,9 @@ auto command_buffer::end() noexcept -> result<void> {
 }
 
 auto command_buffer::destroy() const noexcept -> void {
-    if (handle_ != nullptr) {
-        const VkCommandBuffer command_buffer_handle = reinterpret_cast<VkCommandBuffer>(handle_);
-        vkFreeCommandBuffers(reinterpret_cast<VkDevice>(device_),
-                             reinterpret_cast<VkCommandPool>(pool_), 1, &command_buffer_handle);
-    }
+    const VkCommandBuffer command_buffer_handle = reinterpret_cast<VkCommandBuffer>(handle_);
+    vkFreeCommandBuffers(reinterpret_cast<VkDevice>(device_),
+                         reinterpret_cast<VkCommandPool>(pool_), 1, &command_buffer_handle);
     handle_ = nullptr;
 }
 

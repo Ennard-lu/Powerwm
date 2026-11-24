@@ -45,9 +45,7 @@ auto seat_device::device_id() const noexcept -> i32 {
 }
 
 auto seat_device::destroy() const noexcept -> void {
-    if (seat_handle_ != nullptr && device_id_ >= 0) {
-        libseat_close_device(static_cast<libseat*>(seat_handle_), device_id_);
-    }
+    libseat_close_device(static_cast<libseat*>(seat_handle_), device_id_);
     seat_handle_ = nullptr;
     fd_ = -1;
     device_id_ = -1;
@@ -67,17 +65,10 @@ auto session::valid() const noexcept -> bool {
 }
 
 auto session::is_enabled() const noexcept -> bool {
-    if (state_ == nullptr) {
-        return false;
-    }
     return static_cast<const seat_state*>(state_)->enabled;
 }
 
 auto session::open_device(std::string_view path) noexcept -> result<seat_device> {
-    if (!valid()) {
-        return std::unexpected(make_error(error_code::invalid_argument, "seat is invalid"));
-    }
-
     const std::string device_path{path};
     handle_t fd = -1;
     const i32 device_id =
@@ -89,9 +80,6 @@ auto session::open_device(std::string_view path) noexcept -> result<seat_device>
 }
 
 auto session::dispatch(i32 timeout_ms) noexcept -> result<void> {
-    if (!valid()) {
-        return std::unexpected(make_error(error_code::invalid_argument, "seat is invalid"));
-    }
     if (libseat_dispatch(static_cast<libseat*>(handle_), timeout_ms) < 0) {
         return std::unexpected(make_error(error_code::io, "libseat_dispatch failed"));
     }
@@ -99,14 +87,10 @@ auto session::dispatch(i32 timeout_ms) noexcept -> result<void> {
 }
 
 auto session::destroy() const noexcept -> void {
-    if (handle_ != nullptr) {
-        libseat_close_seat(static_cast<libseat*>(handle_));
-        handle_ = nullptr;
-    }
-    if (state_ != nullptr) {
-        std::unique_ptr<seat_state> state{static_cast<seat_state*>(state_)};
-        state_ = nullptr;
-    }
+    libseat_close_seat(static_cast<libseat*>(handle_));
+    std::unique_ptr<seat_state> state{static_cast<seat_state*>(state_)};
+    handle_ = nullptr;
+    state_ = nullptr;
 }
 
 }

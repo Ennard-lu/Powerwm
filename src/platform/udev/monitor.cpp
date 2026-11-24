@@ -58,10 +58,6 @@ auto monitor::fd() const noexcept -> handle_t {
 }
 
 auto monitor::receive() noexcept -> std::optional<device_event> {
-    if (!valid()) {
-        return std::nullopt;
-    }
-
     udev_device* device = udev_monitor_receive_device(static_cast<udev_monitor*>(handle_));
     if (device == nullptr) {
         return std::nullopt;
@@ -78,14 +74,10 @@ auto monitor::receive() noexcept -> std::optional<device_event> {
 }
 
 auto monitor::destroy() const noexcept -> void {
-    if (handle_ != nullptr) {
-        udev_monitor_unref(static_cast<udev_monitor*>(handle_));
-        handle_ = nullptr;
-    }
-    if (context_ != nullptr) {
-        udev_unref(static_cast<struct udev*>(context_));
-        context_ = nullptr;
-    }
+    udev_monitor_unref(static_cast<udev_monitor*>(handle_));
+    udev_unref(static_cast<struct udev*>(context_));
+    handle_ = nullptr;
+    context_ = nullptr;
     fd_ = -1;
 }
 

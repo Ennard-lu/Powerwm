@@ -244,7 +244,7 @@ auto device::handle_events(page_flip_callback callback, void* context) const noe
 }
 
 auto device::destroy() const noexcept -> void {
-    if (owns_fd_ && fd_handle_ >= 0) {
+    if (owns_fd_) {
         ::close(fd_handle_);
     }
     fd_handle_ = -1;

@@ -39,9 +39,7 @@ auto instance::native_handle() const noexcept -> void* {
 }
 
 auto instance::destroy() const noexcept -> void {
-    if (handle_ != nullptr) {
-        vkDestroyInstance(reinterpret_cast<VkInstance>(handle_), nullptr);
-    }
+    vkDestroyInstance(reinterpret_cast<VkInstance>(handle_), nullptr);
     handle_ = nullptr;
 }
 

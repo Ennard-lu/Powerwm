@@ -31,9 +31,6 @@ auto fence::native_handle() const noexcept -> void* {
 }
 
 auto fence::wait(u64 timeout_ns) noexcept -> result<void> {
-    if (!valid()) {
-        return std::unexpected(make_error(error_code::invalid_argument, "fence is invalid"));
-    }
     const VkFence fence_handle = reinterpret_cast<VkFence>(handle_);
     const VkResult result =
         vkWaitForFences(reinterpret_cast<VkDevice>(device_), 1, &fence_handle, VK_TRUE, timeout_ns);
@@ -49,9 +46,6 @@ auto fence::wait(u64 timeout_ns) noexcept -> result<void> {
 }
 
 auto fence::reset() noexcept -> result<void> {
-    if (!valid()) {
-        return std::unexpected(make_error(error_code::invalid_argument, "fence is invalid"));
-    }
     const VkFence fence_handle = reinterpret_cast<VkFence>(handle_);
     const VkResult result = vkResetFences(reinterpret_cast<VkDevice>(device_), 1, &fence_handle);
     if (result != VK_SUCCESS) {
@@ -63,10 +57,8 @@ auto fence::reset() noexcept -> result<void> {
 }
 
 auto fence::destroy() const noexcept -> void {
-    if (handle_ != nullptr) {
-        vkDestroyFence(reinterpret_cast<VkDevice>(device_), reinterpret_cast<VkFence>(handle_),
-                       nullptr);
-    }
+    vkDestroyFence(reinterpret_cast<VkDevice>(device_), reinterpret_cast<VkFence>(handle_),
+                   nullptr);
     handle_ = nullptr;
 }
 

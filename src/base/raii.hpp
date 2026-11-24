@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include <base/fatal.hpp>
 #include <base/result.hpp>
 #include <base/types.hpp>
 
@@ -12,10 +11,6 @@
 #include <utility>
 
 namespace pwm {
-
-struct without_valid_check_t {};
-
-constexpr inline without_valid_check_t without_valid_check;
 
 template <typename T, typename... Args>
 requires(std::is_nothrow_move_constructible_v<T> && std::is_move_assignable_v<T> &&
@@ -28,13 +23,6 @@ class raii {
 
     raii(value_t&& value, const Args&... arguments) noexcept
         : owns_(true), value_(std::move(value)), arguments_(arguments...) {
-        if (!value_.valid()) {
-            terminate_with_message("raii received an invalid handle");
-        }
-    }
-
-    raii(without_valid_check_t, value_t&& value, const Args&... arguments) noexcept
-        : owns_(true), value_(value), arguments_(arguments...) {
     }
 
     raii(const raii&) = delete;
@@ -89,8 +77,7 @@ class raii {
 
   private:
     auto destroy_owned() noexcept -> void {
-        if (!owns_ || !value_.valid()) {
-            owns_ = false;
+        if (!owns_) {
             return;
         }
         destroy();
@@ -109,10 +96,6 @@ class raii {
 };
 
 template <typename T, typename... Args>
-raii(without_valid_check_t, T&&, const Args&...) -> raii<T, Args...>;
-
-template <typename T, typename... Args>
-requires(!std::same_as<std::remove_all_extents_t<T>, without_valid_check_t>)
 raii(T&&, const Args&...) -> raii<T, Args...>;
 
 }

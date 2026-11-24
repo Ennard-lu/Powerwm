@@ -149,10 +149,6 @@ auto context::fd() const noexcept -> handle_t {
 }
 
 auto context::dispatch() noexcept -> result<void> {
-    if (!valid()) {
-        return std::unexpected(
-            make_error(error_code::invalid_argument, "input context is invalid"));
-    }
     if (libinput_dispatch(static_cast<libinput*>(handle_)) != 0) {
         return std::unexpected(make_error(error_code::io, "libinput_dispatch failed"));
     }
@@ -160,10 +156,6 @@ auto context::dispatch() noexcept -> result<void> {
 }
 
 auto context::next_event() noexcept -> std::optional<input_event> {
-    if (!valid()) {
-        return std::nullopt;
-    }
-
     libinput_event* event = libinput_get_event(static_cast<libinput*>(handle_));
     if (event == nullptr) {
         return std::nullopt;
@@ -175,14 +167,10 @@ auto context::next_event() noexcept -> std::optional<input_event> {
 }
 
 auto context::destroy() const noexcept -> void {
-    if (handle_ != nullptr) {
-        libinput_unref(static_cast<libinput*>(handle_));
-        handle_ = nullptr;
-    }
-    if (udev_ != nullptr) {
-        udev_unref(static_cast<udev*>(udev_));
-        udev_ = nullptr;
-    }
+    libinput_unref(static_cast<libinput*>(handle_));
+    udev_unref(static_cast<udev*>(udev_));
+    handle_ = nullptr;
+    udev_ = nullptr;
     fd_ = -1;
 }
 

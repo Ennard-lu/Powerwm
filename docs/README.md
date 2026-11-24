@@ -47,7 +47,8 @@ docs/
     ├── 0009-c-api-wrapping.md
     ├── 0010-apache-2-0.md
     ├── 0011-namespace-and-integers.md
-    └── 0012-dependent-resource-creation.md
+    ├── 0012-dependent-resource-creation.md
+    └── 0013-c-api-assumes-valid.md
 ```
 
 ## 文档维护规则

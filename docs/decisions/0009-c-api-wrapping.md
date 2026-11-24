@@ -23,9 +23,9 @@ C API 的错误处理、生命周期与所有权不统一，容易产生 fd 泄�
 2. 封装类型约定：
    - 申请：`static auto create(...) -> result<raii<T, Args...>>`（或 `create_*`）；
    - 销毁：`void destroy(Args...) const noexcept`；
-   - 有效性：`bool valid() const noexcept`。
+   - 有效性：可选查询；封装内部不依赖它做防护。
 3. 业务代码只持有 `raii<T, Args...>` 或专用 RAII 类型；裸句柄只存在于封装实现内部。
-4. `destroy` 必须**幂等**、`noexcept`、不返回错误；析构只记录并尽力清理。
+4. `destroy` 假定对象有效，`noexcept`、不返回错误；调用者负责生命周期与不重复销毁。
 5. C 头文件（`<drm/*.h>`、`<vulkan/*.h>`、`<linux/*.h>`、POSIX 头）只允许出现在封装层：
    - `src/base/`
    - `src/platform/`
@@ -35,6 +35,7 @@ C API 的错误处理、生命周期与所有权不统一，容易产生 fd 泄�
 8. 每个封装至少测试：创建失败、正常销毁、重复销毁、移动后销毁。
 9. CI 运行 `tools/check_policy.sh`，扫描裸 C API 与 C 头文件泄漏。
 10. 依赖其他对象的资源由宿主创建；详见 [ADR-0012](0012-dependent-resource-creation.md)。
+11. 封装层不判断对象合法性；详见 [ADR-0013](0013-c-api-assumes-valid.md)。
 
 ## 后果
 

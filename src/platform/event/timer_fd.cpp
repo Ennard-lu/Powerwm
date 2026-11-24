@@ -58,9 +58,7 @@ auto timer_fd::read_expirations() noexcept -> result<u64> {
 }
 
 auto timer_fd::destroy() const noexcept -> void {
-    if (fd_ >= 0) {
-        ::close(fd_);
-    }
+    ::close(fd_);
     fd_ = -1;
 }
 

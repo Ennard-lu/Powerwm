@@ -279,7 +279,7 @@ auto file_descriptor::create(const char* path, pwm::i32 flags)
             .message = "open failed",
         });
     }
-    return raii{without_valid_check, file_descriptor{fd}};
+    return raii{file_descriptor{fd}};
 }
 
 auto open_output(const char* path) -> result<output> {
@@ -348,6 +348,7 @@ struct file_descriptor {
 8. **Vulkan**：`vkCreate*`/`vkDestroy*`、`vkAllocate*`/`vkFree*`、队列、命令池、同步对象全部由 `vulkanpp` 封装；业务层不出现 `Vk*`。
 9. **测试**：每个封装至少覆盖创建失败、重复销毁、移动后销毁、正常销毁。
 10. **依赖资源由宿主创建**：`dumb_buffer`、`framebuffer`、`property_blob` 等依赖 device 的资源，使用 `device::create_*`，不要在依赖类型上提供 `dependent::create(device, ...)`。依赖类型的构造函数私有，`destroy()` 使用创建时保存的宿主句柄。
+11. **封装层不检查对象合法性**：`create` 成功即合法；`destroy`、`wait`、`dispatch` 等不做 `nullptr` / `fd` / `handle` 防护。调用者保证对象有效；违约不保证行为。`raii` 不检查 `valid()`。
 
 > 代码审查中看到裸 C 调用，默认拒绝；除非它就在上述封装层内，并有对应 RAII 类型与测试。
 

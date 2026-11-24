@@ -112,9 +112,7 @@ auto device::queue_family_index() const noexcept -> u32 {
 }
 
 auto device::destroy() const noexcept -> void {
-    if (handle_ != nullptr) {
-        vkDestroyDevice(reinterpret_cast<VkDevice>(handle_), nullptr);
-    }
+    vkDestroyDevice(reinterpret_cast<VkDevice>(handle_), nullptr);
     handle_ = nullptr;
     queue_ = nullptr;
 }
