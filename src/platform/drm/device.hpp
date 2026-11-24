@@ -392,6 +392,11 @@ class device {
 
     [[nodiscard]] auto wait_for_page_flip(i32 timeout_ms) const noexcept -> result<void>;
 
+    using page_flip_callback = auto (*)(void* context) -> void;
+
+    [[nodiscard]] auto handle_events(page_flip_callback callback, void* context) const noexcept
+        -> result<void>;
+
     /// Creates a dumb buffer owned by this device. The device must outlive the buffer.
     [[nodiscard]] auto create_dumb_buffer(const buffer_format& format) const noexcept
         -> result<dumb_buffer>;

@@ -26,6 +26,7 @@ add_library(powerwm_core STATIC
     src/platform/event/event_fd.cpp
     src/platform/event/event_loop.cpp
     src/platform/event/poll.cpp
+    src/platform/event/timer_fd.cpp
     src/platform/drm/lookup.cpp
 )
 
@@ -58,7 +59,7 @@ target_link_libraries(powerwm PRIVATE powerwm_core)
 
 if(POWERWM_BUILD_BRINGUP_TOOL)
     add_executable(powerwm_drm_bringup tools/drm_bringup.cpp)
-    target_link_libraries(powerwm_drm_bringup PRIVATE powerwm_seat)
+    target_link_libraries(powerwm_drm_bringup PRIVATE powerwm_seat powerwm_input)
 
     add_executable(powerwm_input_probe tools/input_probe.cpp)
     target_link_libraries(powerwm_input_probe PRIVATE powerwm_input)

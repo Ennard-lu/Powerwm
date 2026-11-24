@@ -188,7 +188,17 @@ auto device::create_property_blob(std::span<const std::byte> data) const noexcep
 
 namespace {
 
-auto mark_page_flip(int, unsigned int, unsigned int, unsigned int, void* user_data) -> void {
+struct page_flip_bridge {
+    device::page_flip_callback callback;
+    void* context;
+};
+
+auto dispatch_page_flip(int, unsigned int, unsigned int, unsigned int, void* user_data) -> void {
+    auto* bridge = static_cast<page_flip_bridge*>(user_data);
+    bridge->callback(bridge->context);
+}
+
+auto mark_page_flip(void* user_data) -> void {
     *static_cast<bool*>(user_data) = true;
 }
 
@@ -196,9 +206,6 @@ auto mark_page_flip(int, unsigned int, unsigned int, unsigned int, void* user_da
 
 auto device::wait_for_page_flip(i32 timeout_ms) const noexcept -> result<void> {
     bool completed = false;
-    drmEventContext context{};
-    context.version = DRM_EVENT_CONTEXT_VERSION;
-    context.page_flip_handler = mark_page_flip;
 
     while (!completed) {
         auto readable = event::wait_readable(fd_handle_, timeout_ms);
@@ -208,9 +215,24 @@ auto device::wait_for_page_flip(i32 timeout_ms) const noexcept -> result<void> {
         if (!*readable) {
             return std::unexpected(make_error(error_code::io, "page flip timed out"));
         }
-        if (drmHandleEvent(fd_handle_, &context) != 0) {
-            return std::unexpected(make_error(error_code::io, "drmHandleEvent failed"));
+        if (auto handled = handle_events(mark_page_flip, &completed); !handled) {
+            return std::unexpected(handled.error());
         }
+    }
+    return {};
+}
+
+auto device::handle_events(page_flip_callback callback, void* context) const noexcept
+    -> result<void> {
+    page_flip_bridge bridge{.callback = callback, .context = context};
+    drmEventContext event_context{};
+    event_context.version = DRM_EVENT_CONTEXT_VERSION;
+    if (callback != nullptr) {
+        event_context.page_flip_handler = dispatch_page_flip;
+    }
+
+    if (drmHandleEvent(fd_handle_, &event_context) != 0) {
+        return std::unexpected(make_error(error_code::io, "drmHandleEvent failed"));
     }
     return {};
 }

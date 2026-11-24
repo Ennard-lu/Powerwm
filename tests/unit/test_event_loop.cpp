@@ -3,6 +3,7 @@
 #include <base/raii.hpp>
 #include <platform/event/event_fd.hpp>
 #include <platform/event/event_loop.hpp>
+#include <platform/event/timer_fd.hpp>
 
 #include <cstdlib>
 #include <utility>
@@ -30,6 +31,37 @@ auto create_event_fd(pwm::u32 value) -> pwm::raii<event::event_fd> {
         std::exit(EXIT_FAILURE);
     }
     return pwm::raii{std::move(*result)};
+}
+
+auto create_timer_fd() -> pwm::raii<event::timer_fd> {
+    auto result = event::timer_fd::create();
+    if (!result) {
+        std::exit(EXIT_FAILURE);
+    }
+    return pwm::raii{std::move(*result)};
+}
+
+auto test_timer_dispatch() -> bool {
+    auto timer = create_timer_fd();
+    if (!timer->arm_ms(1)) {
+        return false;
+    }
+
+    dispatch_state state{};
+    event::event_loop loop;
+    if (!loop.add(timer->fd(), event::poll_event::readable, count_first, &state)) {
+        return false;
+    }
+
+    auto dispatched = loop.run_once(100);
+    if (!dispatched || *dispatched != 1 || state.first_count != 1) {
+        return false;
+    }
+    auto expirations = timer->read_expirations();
+    if (!expirations || *expirations == 0) {
+        return false;
+    }
+    return true;
 }
 
 auto test_dispatch_and_remove() -> bool {
@@ -79,5 +111,11 @@ auto test_dispatch_and_remove() -> bool {
 }
 
 int main() {
-    return test_dispatch_and_remove() ? EXIT_SUCCESS : EXIT_FAILURE;
+    if (!test_dispatch_and_remove()) {
+        return EXIT_FAILURE;
+    }
+    if (!test_timer_dispatch()) {
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }

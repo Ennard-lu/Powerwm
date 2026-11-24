@@ -21,7 +21,8 @@
 - libinput/libudev 封装与 `powerwm_input_probe` 输入事件探针。
 - libseat 会话封装与 `powerwm_seat_probe`，支持设备打开与 enable/disable 事件。
 - DRM 点灯工具通过 seat 打开设备，VT disable 时暂停，enable 后恢复 master 与提交。
-- 多 fd `poll` 事件循环、`eventfd` 封装与事件循环单元测试。
+- 多 fd `poll` 事件循环、`eventfd`/`timerfd` 封装与事件循环单元测试。
+- DRM 点灯工具改为事件驱动：DRM fd、timerfd、seat dispatch、input fd 共用循环。
 - 依赖 DRM device 的资源改由 `device::create_*` 创建；统一使用 `auto foo() -> T` 函数声明风格。
 - 英文 README；中文 README 移至 `docs/README.zh-CN.md`。
 - Apache-2.0 `LICENSE` 与 SPDX 文件头。

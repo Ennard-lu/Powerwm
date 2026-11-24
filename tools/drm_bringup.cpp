@@ -6,6 +6,9 @@
 #include <platform/drm/device.hpp>
 #include <platform/drm/lookup.hpp>
 #include <platform/drm/properties.hpp>
+#include <platform/event/event_loop.hpp>
+#include <platform/event/timer_fd.hpp>
+#include <platform/input/context.hpp>
 #include <platform/seat/seat.hpp>
 
 #include <cstdlib>
@@ -18,6 +21,8 @@
 namespace {
 
 namespace drm = pwm::platform::drm;
+namespace event = pwm::platform::event;
+namespace input = pwm::platform::input;
 namespace seat = pwm::platform::seat;
 
 struct drm_runtime {
@@ -31,6 +36,28 @@ struct output_properties {
     drm::prop::id::crtc crtc;
     drm::prop::id::connector connector;
     drm::prop::id::plane plane;
+};
+
+struct demo_state {
+    drm::device* device = nullptr;
+    seat::session* session = nullptr;
+    input::context* input = nullptr;
+    const drm::output_target* output = nullptr;
+    const output_properties* properties = nullptr;
+    const drm::property_blob* mode_blob = nullptr;
+    const drm::framebuffer* first_framebuffer = nullptr;
+    const drm::framebuffer* second_framebuffer = nullptr;
+    drm::mapped_memory* first_memory = nullptr;
+    drm::mapped_memory* second_memory = nullptr;
+    const drm::buffer_format* format = nullptr;
+    event::timer_fd* timer = nullptr;
+    bool session_enabled = false;
+    bool waiting_for_flip = false;
+    bool allow_modeset = true;
+    bool running = true;
+    pwm::u32 frame = 0;
+    pwm::u32 frame_count = 180;
+    pwm::u32 waiting_ticks = 0;
 };
 
 auto require_value(pwm::result<void>&& value) -> void {
@@ -222,62 +249,125 @@ auto commit_frame(drm::device& device, const drm::output_target& output,
     require_value(device.commit_atomic(request.value(), flags));
 }
 
-auto wait_for_page_flip(drm::device& device, seat::session* session) -> pwm::result<bool> {
-    if (session == nullptr) {
-        auto result = device.wait_for_page_flip(1000);
-        if (!result) {
-            return std::unexpected(result.error());
-        }
-        return true;
+auto print_event(const input::input_event& input_event) -> void {
+    using input::input_event_type;
+    switch (input_event.type) {
+    case input_event_type::keyboard_key:
+        std::println("key code={} state={}", input_event.key_code,
+                     input_event.pressed ? "pressed" : "released");
+        break;
+    case input_event_type::pointer_motion:
+        std::println("motion dx={:.2f} dy={:.2f}", input_event.dx, input_event.dy);
+        break;
+    case input_event_type::pointer_button:
+        std::println("button code={} state={}", input_event.button,
+                     input_event.pressed ? "pressed" : "released");
+        break;
+    case input_event_type::pointer_axis:
+        std::println("axis value={:.2f}", input_event.axis_value);
+        break;
+    case input_event_type::touch_down:
+    case input_event_type::touch_up:
+    case input_event_type::touch_motion:
+        std::println("touch slot={} x={:.2f} y={:.2f}", input_event.touch_slot, input_event.x,
+                     input_event.y);
+        break;
+    default:
+        break;
     }
-
-    constexpr pwm::i32 attempts = 20;
-    for (pwm::i32 attempt = 0; attempt < attempts; ++attempt) {
-        auto result = device.wait_for_page_flip(50);
-        if (result) {
-            return true;
-        }
-        auto dispatched = session->dispatch(0);
-        if (!dispatched) {
-            return std::unexpected(dispatched.error());
-        }
-        if (!session->is_enabled()) {
-            return false;
-        }
-    }
-    return std::unexpected(pwm::make_error(pwm::error_code::io, "page flip timed out"));
 }
 
-auto render_frames(drm::device& device, seat::session* session, const drm::output_target& output,
-                   const output_properties& ids, const drm::property_blob& blob,
-                   const drm::framebuffer& first, const drm::framebuffer& second,
-                   drm::mapped_memory& first_memory, drm::mapped_memory& second_memory,
-                   const drm::buffer_format& format) -> void {
-    constexpr pwm::u32 frame_count = 180;
-    pwm::u32 frame = 0;
-    bool allow_modeset = true;
+auto present_frame(demo_state& state) -> void {
+    const bool use_first = state.frame % 2 == 0;
+    auto& memory = use_first ? *state.first_memory : *state.second_memory;
+    const auto& framebuffer = use_first ? *state.first_framebuffer : *state.second_framebuffer;
 
-    while (frame < frame_count) {
-        if (session != nullptr && !session->is_enabled()) {
-            wait_until_enabled(*session);
-            require_value(device.set_master());
-            allow_modeset = true;
-        }
+    fill_animation_frame(memory, *state.format, state.frame);
+    commit_frame(*state.device, *state.output, *state.properties, framebuffer, *state.mode_blob,
+                 state.allow_modeset);
+    state.allow_modeset = false;
+    state.waiting_for_flip = true;
+    state.waiting_ticks = 0;
+    ++state.frame;
+}
 
-        const bool use_first = frame % 2 == 0;
-        auto& memory = use_first ? first_memory : second_memory;
-        const auto& framebuffer = use_first ? first : second;
-        fill_animation_frame(memory, format, frame);
-        commit_frame(device, output, ids, framebuffer, blob, allow_modeset);
-        allow_modeset = false;
+auto on_page_flip(void* context) -> void {
+    auto& state = *static_cast<demo_state*>(context);
+    state.waiting_for_flip = false;
+    state.waiting_ticks = 0;
+}
 
-        const bool completed = require_value(wait_for_page_flip(device, session));
-        if (!completed) {
-            allow_modeset = true;
-            continue;
-        }
-        ++frame;
+auto on_drm_event(void* context, event::poll_event) -> void {
+    auto& state = *static_cast<demo_state*>(context);
+    auto handled = state.device->handle_events(on_page_flip, &state);
+    if (!handled) {
+        std::println(stderr, "drm error: {}", handled.error().message);
+        state.running = false;
     }
+}
+
+auto on_input_event(void* context, event::poll_event) -> void {
+    auto& state = *static_cast<demo_state*>(context);
+    auto dispatched = state.input->dispatch();
+    if (!dispatched) {
+        std::println(stderr, "input error: {}", dispatched.error().message);
+        state.running = false;
+        return;
+    }
+    while (auto input_event = state.input->next_event()) {
+        print_event(*input_event);
+    }
+}
+
+auto on_timer(void* context, event::poll_event) -> void {
+    auto& state = *static_cast<demo_state*>(context);
+    auto expirations = state.timer->read_expirations();
+    if (!expirations) {
+        std::println(stderr, "timer error: {}", expirations.error().message);
+        state.running = false;
+        return;
+    }
+
+    if (state.session != nullptr) {
+        auto dispatched = state.session->dispatch(0);
+        if (!dispatched) {
+            std::println(stderr, "seat error: {}", dispatched.error().message);
+            state.running = false;
+            return;
+        }
+        const bool enabled = state.session->is_enabled();
+        if (enabled != state.session_enabled) {
+            state.session_enabled = enabled;
+            state.waiting_for_flip = false;
+            state.waiting_ticks = 0;
+            if (enabled) {
+                state.allow_modeset = true;
+                auto master = state.device->set_master();
+                if (!master) {
+                    std::println(stderr, "master error: {}", master.error().message);
+                    state.running = false;
+                    return;
+                }
+            }
+        }
+    }
+
+    if (!state.session_enabled) {
+        return;
+    }
+    if (state.waiting_for_flip) {
+        ++state.waiting_ticks;
+        if (state.waiting_ticks > 60) {
+            std::println(stderr, "page flip timed out");
+            state.running = false;
+        }
+        return;
+    }
+    if (state.frame >= state.frame_count) {
+        state.running = false;
+        return;
+    }
+    present_frame(state);
 }
 
 auto run_drm_bringup() -> int {
@@ -302,9 +392,51 @@ auto run_drm_bringup() -> int {
     auto blob = create_mode_blob(device, output.mode);
     const output_properties ids = lookup_output_properties(device, output);
 
-    render_frames(device, session, output, ids, blob.value(), first_framebuffer.value(),
-                  second_framebuffer.value(), first_memory.value(), second_memory.value(),
-                  first_buffer.value().format());
+    auto input_result = input::context::create("seat0");
+    pwm::raii<input::context> input_context;
+    bool has_input = false;
+    if (input_result) {
+        input_context = pwm::raii{std::move(*input_result)};
+        has_input = true;
+    } else {
+        std::println(stderr, "warning: libinput unavailable");
+    }
+
+    auto timer = pwm::raii{require_value(event::timer_fd::create())};
+    demo_state state{
+        .device = &device,
+        .session = session,
+        .input = has_input ? &input_context.value() : nullptr,
+        .output = &output,
+        .properties = &ids,
+        .mode_blob = &blob.value(),
+        .first_framebuffer = &first_framebuffer.value(),
+        .second_framebuffer = &second_framebuffer.value(),
+        .first_memory = &first_memory.value(),
+        .second_memory = &second_memory.value(),
+        .format = &format,
+        .timer = &timer.value(),
+        .session_enabled = session == nullptr || session->is_enabled(),
+        .waiting_for_flip = false,
+        .allow_modeset = true,
+        .running = true,
+        .frame = 0,
+        .frame_count = 180,
+        .waiting_ticks = 0,
+    };
+
+    event::event_loop loop;
+    require_value(loop.add(device.fd(), event::poll_event::readable, on_drm_event, &state));
+    require_value(loop.add(timer->fd(), event::poll_event::readable, on_timer, &state));
+    if (has_input) {
+        require_value(
+            loop.add(input_context->fd(), event::poll_event::readable, on_input_event, &state));
+    }
+    require_value(timer->arm_ms(16));
+
+    while (state.running) {
+        require_value(loop.run_once(100));
+    }
 
     if (session == nullptr || session->is_enabled()) {
         require_value(device.drop_master());

@@ -41,12 +41,12 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 
 - `src/base/`：`result`、`raii`、`fatal`、定宽整数、宏等基础设施，命名空间 `pwm`。
 - `src/platform/drm/`：`libdrm` 封装（`device`、`atomic_request`、`dumb_buffer`、`framebuffer`、属性查找、page flip）。
-- `src/platform/event/`：基于 `poll` 的多 fd 事件循环、`eventfd` 封装、page flip/输入等待原语。
+- `src/platform/event/`：基于 `poll` 的多 fd 事件循环、`eventfd`/`timerfd` 封装、page flip/输入等待原语。
 - `src/platform/input/`：`libinput` + `libudev` 上下文，标准化键盘/指针/触摸事件。
 - `src/platform/seat/`：`libseat` 会话封装，设备打开与 VT enable/disable 事件；DRM 工具可用时走该路径。
 - `src/platform/gbm/`：早期 `libgbm` 封装，Vulkan 后端落地后评估移除。
 - `src/app/main.cpp`：应用骨架，无参数时打印版本与帮助，不触碰 DRM。
-- `tools/drm_bringup.cpp`：DRM/KMS 点灯工具，双缓冲 + page flip 动画；可用时通过 libseat 打开设备，并在 VT 切换时暂停/恢复。
+- `tools/drm_bringup.cpp`：事件驱动 DRM/KMS demo，DRM fd、timerfd、seat dispatch 与 input fd 共用事件循环；双缓冲 page flip 与 VT 暂停/恢复。
 - `tools/input_probe.cpp`：5 秒输入事件探针。
 - `tools/seat_probe.cpp`：5 秒 seat 会话探针。
 - CMake 目标：`powerwm_core`（静态库）、`powerwm`（应用）、`powerwm_drm_bringup`（工具）、`powerwm_tests`。

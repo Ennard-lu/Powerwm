@@ -46,12 +46,12 @@ The repository currently contains the Phase 0 foundation and a DRM/KMS bring-up 
 - `src/base/` — `result`, `raii`, fatal handling, fixed-width integers, macros.
 - `src/platform/drm/` — libdrm wrappers: `device`, `atomic_request`, `dumb_buffer`,
   `framebuffer`, property lookup, display modes.
-- `src/platform/event/` — poll-based multi-fd event loop, `eventfd` wrapper, and page-flip/input waiting primitives.
+- `src/platform/event/` — poll-based multi-fd event loop, `eventfd`/`timerfd` wrappers, and page-flip/input waiting primitives.
 - `src/platform/input/` — libinput + libudev context with normalized keyboard, pointer, and touch events.
 - `src/platform/seat/` — libseat session wrapper for device access and VT enable/disable events; the DRM tool uses it when available.
 - `src/platform/gbm/` — early libgbm wrapper; will be evaluated after the Vulkan backend lands.
 - `src/app/main.cpp` — application skeleton; prints version/help and never touches DRM.
-- `tools/drm_bringup.cpp` — DRM/KMS double-buffered page-flip animation; uses libseat when available and pauses/resumes across VT switches.
+- `tools/drm_bringup.cpp` — event-driven DRM/KMS demo: DRM fd, timerfd, seat dispatch, and input fd share one loop; double-buffered page flips and VT pause/resume.
 - `tools/input_probe.cpp` — five-second libinput event probe for keyboard, pointer, and touch input.
 - `tools/seat_probe.cpp` — five-second libseat session probe.
 - `tests/unit/` — CTest coverage for `result`, `raii`, and the multi-fd event loop.
