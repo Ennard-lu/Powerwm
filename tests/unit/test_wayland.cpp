@@ -16,13 +16,16 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <fractional_scale_bindings.hpp>
 #include <print>
 #include <span>
 #include <string_view>
 #include <thread>
 #include <tuple>
 #include <vector>
+#include <viewporter_bindings.hpp>
 #include <wayland_bindings.hpp>
+#include <xdg_decoration_bindings.hpp>
 #include <xdg_output_bindings.hpp>
 #include <xdg_shell_bindings.hpp>
 
@@ -1266,6 +1269,121 @@ auto test_xdg_output() -> bool {
     return xdg_events == 5 && server.objects().find(5) != nullptr;
 }
 
+auto test_viewport_fractional_decoration() -> bool {
+    namespace transport = pwm::platform::wayland;
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-extra.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    const u32 viewporter_global = display.add_global("wp_viewporter", 1);
+    const u32 fractional_global = display.add_global("wp_fractional_scale_manager_v1", 1);
+    const u32 decoration_global = display.add_global("zxdg_decoration_manager_v1", 1);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    const auto bind_global = [&requests](u32 global, std::string_view name, u32 version, u32 id) {
+        static_cast<void>(requests.begin_message(2, 0));
+        static_cast<void>(requests.write_u32(global));
+        static_cast<void>(requests.write_string(name));
+        static_cast<void>(requests.write_u32(version));
+        static_cast<void>(requests.write_new_id(id));
+        static_cast<void>(requests.end_message());
+    };
+    bind_global(viewporter_global, "wp_viewporter", 1, 3);
+    bind_global(fractional_global, "wp_fractional_scale_manager_v1", 1, 4);
+    bind_global(decoration_global, "zxdg_decoration_manager_v1", 1, 5);
+    static_cast<void>(requests.begin_message(3, 1));
+    static_cast<void>(requests.write_new_id(6));
+    static_cast<void>(requests.write_object(100));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 1));
+    static_cast<void>(requests.write_new_id(7));
+    static_cast<void>(requests.write_object(100));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(5, 1));
+    static_cast<void>(requests.write_new_id(8));
+    static_cast<void>(requests.write_object(100));
+    static_cast<void>(requests.end_message());
+
+    auto sent = client.send(requests.bytes(), {});
+    if (!sent || sent->bytes != requests.bytes().size()) {
+        return false;
+    }
+    if (!server.receive_available()) {
+        return false;
+    }
+    auto dispatched = server.dispatch_available();
+    if (!dispatched || *dispatched != 7 || !server.flush()) {
+        return false;
+    }
+
+    std::array<std::byte, 4096> received{};
+    std::vector<std::byte> input;
+    for (pwm::i32 attempt = 0; attempt < 100; ++attempt) {
+        auto result = client.receive(received, std::span<pwm::handle_t>{});
+        if (!result) {
+            return false;
+        }
+        input.insert(input.end(), received.begin(), received.begin() + result->bytes);
+        if (result->would_block || result->closed || !input.empty()) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+
+    pwm::u32 fractional_events = 0;
+    pwm::u32 decoration_events = 0;
+    pwm::usize offset = 0;
+    while (offset + sizeof(wayland::message_header) <= input.size()) {
+        auto header = wayland::decode_header(std::span<const std::byte>{input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == 7) {
+            if (!generated::wp_fractional_scale_v1::event_preferred_scale::decode(reader)) {
+                return false;
+            }
+            ++fractional_events;
+        } else if (header->object == 8) {
+            if (!generated::zxdg_toplevel_decoration_v1::event_configure::decode(reader)) {
+                return false;
+            }
+            ++decoration_events;
+        } else if (header->object == 2 && header->opcode == 0) {
+            static_cast<void>(reader);
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    return fractional_events == 1 && decoration_events == 1 &&
+           server.objects().find(6) != nullptr && server.objects().find(7) != nullptr &&
+           server.objects().find(8) != nullptr;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -1316,6 +1434,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_viewport_fractional_decoration()) {
+        std::println(stderr, "viewport/fractional/decoration test failed");
         return EXIT_FAILURE;
     }
     if (!test_xdg_output()) {

@@ -34,6 +34,9 @@ auto display_service::advertise_core(u32 output_width, u32 output_height, u32 re
     add_global("wl_shm", 1);
     add_global("wl_output", 4);
     add_global("zxdg_output_manager_v1", 3);
+    add_global("wp_viewporter", 1);
+    add_global("wp_fractional_scale_manager_v1", 1);
+    add_global("zxdg_decoration_manager_v1", 1);
     add_global("wl_seat", 2);
     add_global("wl_data_device_manager", 3);
     add_global("xdg_wm_base", 1);

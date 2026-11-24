@@ -58,7 +58,8 @@ Working today:
 - `powerwm_wayland_server` event-loop protocol server over a Unix socket
 - `powerwm_wayland_kms_compositor` displaying protocol shm surfaces through Vulkan and KMS
 - keyboard, pointer, and touch event delivery with scene hit testing
-- subcompositor, data-device-manager, and xdg-output protocol objects
+- subcompositor, data-device-manager, xdg-output, viewporter, fractional-scale, and
+  xdg-decoration protocol objects
 - real GTK4 client connects and commits a shm window
 
 Still ahead:

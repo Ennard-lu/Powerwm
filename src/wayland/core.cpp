@@ -5,10 +5,13 @@
 
 #include <algorithm>
 #include <cstring>
+#include <fractional_scale_bindings.hpp>
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <viewporter_bindings.hpp>
 #include <wayland_bindings.hpp>
+#include <xdg_decoration_bindings.hpp>
 #include <xdg_output_bindings.hpp>
 
 namespace pwm::wayland {
@@ -85,6 +88,104 @@ auto seat_object::request_get_touch(object_id touch) -> result<void> {
 
 auto seat_object::request_release() -> result<void> {
     return core->service().destroy_object(id);
+}
+
+auto viewport_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto viewport_object::request_set_source(f64 x, f64 y, f64 width, f64 height) -> result<void> {
+    static_cast<void>(x);
+    static_cast<void>(y);
+    static_cast<void>(width);
+    static_cast<void>(height);
+    return {};
+}
+
+auto viewport_object::request_set_destination(i32 width, i32 height) -> result<void> {
+    static_cast<void>(width);
+    static_cast<void>(height);
+    return {};
+}
+
+auto viewporter_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto viewporter_object::request_get_viewport(object_id viewport, object_id surface)
+    -> result<void> {
+    auto* object = core->store(core->viewports_, viewport_object{core, viewport, surface});
+    return add_object<viewport_object, generated::wp_viewport>(
+        core->service().connection_ref().objects(), viewport, *object);
+}
+
+auto fractional_scale_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto fractional_scale_manager_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto fractional_scale_manager_object::request_get_fractional_scale(object_id fractional_scale,
+                                                                   object_id surface)
+    -> result<void> {
+    static_cast<void>(surface);
+    auto* object =
+        core->store(core->fractional_scales_, fractional_scale_object{core, fractional_scale});
+    if (auto added = add_object<fractional_scale_object, generated::wp_fractional_scale_v1>(
+            core->service().connection_ref().objects(), fractional_scale, *object);
+        !added) {
+        return std::unexpected(added.error());
+    }
+    generated::wp_fractional_scale_v1::event_preferred_scale event{};
+    std::get<0>(event.arguments) = 120;
+    protocol_writer writer;
+    if (auto encoded = generated::wp_fractional_scale_v1::event_preferred_scale::encode(
+            writer, fractional_scale, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return core->service().queue_event(writer);
+}
+
+auto toplevel_decoration_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto toplevel_decoration_object::request_set_mode(u32 value) -> result<void> {
+    mode = value;
+    return {};
+}
+
+auto toplevel_decoration_object::request_unset_mode() -> result<void> {
+    mode = 1;
+    return {};
+}
+
+auto decoration_manager_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto decoration_manager_object::request_get_toplevel_decoration(object_id decoration,
+                                                                object_id toplevel)
+    -> result<void> {
+    auto* object = core->store(core->toplevel_decorations_,
+                               toplevel_decoration_object{core, decoration, toplevel});
+    if (auto added = add_object<toplevel_decoration_object, generated::zxdg_toplevel_decoration_v1>(
+            core->service().connection_ref().objects(), decoration, *object);
+        !added) {
+        return std::unexpected(added.error());
+    }
+    generated::zxdg_toplevel_decoration_v1::event_configure event{};
+    std::get<0>(event.arguments) = 1;
+    protocol_writer writer;
+    if (auto encoded = generated::zxdg_toplevel_decoration_v1::event_configure::encode(
+            writer, decoration, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return core->service().queue_event(writer);
 }
 
 auto xdg_output_object::request_destroy() -> result<void> {
@@ -449,6 +550,22 @@ core_protocol::core_protocol(display_service& service) noexcept : service_(&serv
 auto core_protocol::bind_global(std::string_view interface, object_id id, u32 version)
     -> result<void> {
     static_cast<void>(version);
+    if (interface == generated::wp_viewporter::name) {
+        auto* object = store(viewporters_, viewporter_object{this, id});
+        return add_object<viewporter_object, generated::wp_viewporter>(
+            service_->connection_ref().objects(), id, *object);
+    }
+    if (interface == generated::wp_fractional_scale_manager_v1::name) {
+        auto* object = store(fractional_scale_managers_, fractional_scale_manager_object{this, id});
+        return add_object<fractional_scale_manager_object,
+                          generated::wp_fractional_scale_manager_v1>(
+            service_->connection_ref().objects(), id, *object);
+    }
+    if (interface == generated::zxdg_decoration_manager_v1::name) {
+        auto* object = store(decoration_managers_, decoration_manager_object{this, id});
+        return add_object<decoration_manager_object, generated::zxdg_decoration_manager_v1>(
+            service_->connection_ref().objects(), id, *object);
+    }
     if (interface == generated::zxdg_output_manager_v1::name) {
         auto* object = store(xdg_output_managers_, xdg_output_manager_object{this, id, version});
         return add_object<xdg_output_manager_object, generated::zxdg_output_manager_v1>(

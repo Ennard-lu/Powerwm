@@ -32,6 +32,60 @@ struct surface_commit_event {
 
 using surface_commit_callback = auto (*)(void* context, const surface_commit_event& event) -> void;
 
+struct viewport_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    object_id surface = 0;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_set_source(f64 x, f64 y, f64 width, f64 height) -> result<void>;
+    [[nodiscard]] auto request_set_destination(i32 width, i32 height) -> result<void>;
+};
+
+struct viewporter_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_get_viewport(object_id viewport, object_id surface) -> result<void>;
+};
+
+struct fractional_scale_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+};
+
+struct fractional_scale_manager_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_get_fractional_scale(object_id fractional_scale, object_id surface)
+        -> result<void>;
+};
+
+struct toplevel_decoration_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    object_id toplevel = 0;
+    u32 mode = 1;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_set_mode(u32 mode) -> result<void>;
+    [[nodiscard]] auto request_unset_mode() -> result<void>;
+};
+
+struct decoration_manager_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_get_toplevel_decoration(object_id decoration, object_id toplevel)
+        -> result<void>;
+};
+
 struct xdg_output_object {
     core_protocol* core = nullptr;
     object_id id = 0;
@@ -283,6 +337,9 @@ class core_protocol {
     friend struct seat_object;
     friend struct subcompositor_object;
     friend struct xdg_output_manager_object;
+    friend struct viewporter_object;
+    friend struct fractional_scale_manager_object;
+    friend struct decoration_manager_object;
     friend struct data_device_manager_object;
 
     [[nodiscard]] auto send_shm_formats(object_id id) -> result<void>;
@@ -309,6 +366,12 @@ class core_protocol {
     std::vector<std::unique_ptr<pointer_object>> pointers_;
     std::vector<std::unique_ptr<keyboard_object>> keyboards_;
     std::vector<std::unique_ptr<touch_object>> touches_;
+    std::vector<std::unique_ptr<viewporter_object>> viewporters_;
+    std::vector<std::unique_ptr<viewport_object>> viewports_;
+    std::vector<std::unique_ptr<fractional_scale_manager_object>> fractional_scale_managers_;
+    std::vector<std::unique_ptr<fractional_scale_object>> fractional_scales_;
+    std::vector<std::unique_ptr<decoration_manager_object>> decoration_managers_;
+    std::vector<std::unique_ptr<toplevel_decoration_object>> toplevel_decorations_;
     std::vector<std::unique_ptr<xdg_output_manager_object>> xdg_output_managers_;
     std::vector<std::unique_ptr<xdg_output_object>> xdg_outputs_;
     std::vector<std::unique_ptr<subcompositor_object>> subcompositors_;
