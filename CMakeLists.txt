@@ -88,6 +88,7 @@ add_library(powerwm_vulkanpp STATIC
     src/render/vulkanpp/dma_buf_image.cpp
     src/render/vulkanpp/offscreen.cpp
     src/render/vulkanpp/triangle.cpp
+    src/render/vulkanpp/triangle_pass.cpp
 )
 target_link_libraries(powerwm_vulkanpp PUBLIC
     powerwm_core
@@ -126,6 +127,10 @@ if(POWERWM_BUILD_BRINGUP_TOOL)
 
     add_executable(powerwm_vulkan_kms_demo tools/vulkan_kms_demo.cpp)
     target_link_libraries(powerwm_vulkan_kms_demo PRIVATE powerwm_vulkanpp)
+    target_compile_definitions(powerwm_vulkan_kms_demo PRIVATE
+        POWERWM_SHADER_DIR="${POWERWM_SHADER_BINARY_DIR}"
+    )
+    add_dependencies(powerwm_vulkan_kms_demo powerwm_shaders)
 
     add_executable(powerwm_vulkan_pipeline_probe tools/vulkan_pipeline_probe.cpp)
     target_link_libraries(powerwm_vulkan_pipeline_probe PRIVATE powerwm_vulkanpp)

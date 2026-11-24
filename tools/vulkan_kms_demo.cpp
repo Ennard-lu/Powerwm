@@ -10,10 +10,15 @@
 #include <render/vulkanpp/dma_buf_image.hpp>
 #include <render/vulkanpp/instance.hpp>
 
+#include <cstddef>
 #include <cstdlib>
+#include <fstream>
 #include <print>
+#include <span>
+#include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -44,6 +49,24 @@ auto require_value(pwm::result<T>&& value) -> T {
         std::exit(EXIT_FAILURE);
     }
     return std::move(*value);
+}
+
+auto load_spirv(const std::string& path) -> pwm::result<std::vector<std::byte>> {
+    std::ifstream file{path, std::ios::binary | std::ios::ate};
+    if (!file) {
+        return std::unexpected(pwm::make_error(pwm::error_code::io, "cannot open SPIR-V file"));
+    }
+    const std::streamsize size = file.tellg();
+    if (size <= 0) {
+        return std::unexpected(pwm::make_error(pwm::error_code::io, "empty SPIR-V file"));
+    }
+    std::vector<std::byte> data(static_cast<pwm::usize>(size));
+    file.seekg(0);
+    file.read(reinterpret_cast<char*>(data.data()), size);
+    if (!file) {
+        return std::unexpected(pwm::make_error(pwm::error_code::io, "cannot read SPIR-V file"));
+    }
+    return data;
 }
 
 auto enable_drm(drm::device& device) -> void {

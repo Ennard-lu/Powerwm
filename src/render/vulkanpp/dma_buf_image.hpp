@@ -7,6 +7,9 @@
 #include <render/vulkanpp/color.hpp>
 #include <render/vulkanpp/device.hpp>
 
+#include <cstddef>
+#include <span>
+
 namespace pwm::vulkanpp {
 
 class dma_buf_image {
@@ -30,6 +33,10 @@ class dma_buf_image {
     [[nodiscard]] auto fd() const noexcept -> handle_t;
 
     [[nodiscard]] auto clear(color clear_color) noexcept -> result<void>;
+
+    [[nodiscard]] auto render_triangle(std::span<const std::byte> vertex_spirv,
+                                       std::span<const std::byte> fragment_spirv) noexcept
+        -> result<void>;
 
     auto destroy() const noexcept -> void;
 

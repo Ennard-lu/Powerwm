@@ -41,7 +41,7 @@ Working today:
 - native DRM/KMS output with atomic modesetting and page flips
 - double-buffered animation and VT pause/resume
 - seat, input, hotplug, and event-loop foundations
-- Vulkan graphics pipeline, scene/damage foundation, DMA-BUF export, and KMS page-flip presentation
+- Vulkan shader pipeline, scene/damage foundation, DMA-BUF export, and KMS page-flip presentation
 - headless output and test scaffolding
 - diagnostics for DRM outputs and Vulkan devices
 

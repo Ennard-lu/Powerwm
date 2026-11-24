@@ -4,6 +4,7 @@
 #include <render/vulkanpp/command_pool.hpp>
 #include <render/vulkanpp/dma_buf_image.hpp>
 #include <render/vulkanpp/fence.hpp>
+#include <render/vulkanpp/triangle.hpp>
 
 #include <unistd.h>
 
@@ -84,7 +85,7 @@ auto create_dma_buf_image(const device& device, u32 width_px, u32 height_px) noe
     image_info.arrayLayers = 1;
     image_info.samples = VK_SAMPLE_COUNT_1_BIT;
     image_info.tiling = VK_IMAGE_TILING_LINEAR;
-    image_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    image_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -241,6 +242,13 @@ auto dma_buf_image::clear(color clear_color) noexcept -> result<void> {
         return std::unexpected(submitted.error());
     }
     return fence_handle->wait(1000000000);
+}
+
+auto dma_buf_image::render_triangle(std::span<const std::byte> vertex_spirv,
+                                    std::span<const std::byte> fragment_spirv) noexcept
+    -> result<void> {
+    return render_triangle_to_image(*device_, image_, width_px_, height_px_, vertex_spirv,
+                                    fragment_spirv);
 }
 
 auto dma_buf_image::destroy() const noexcept -> void {

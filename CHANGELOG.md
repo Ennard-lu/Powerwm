@@ -29,7 +29,8 @@ pre-1.0 `0.x.y` convention.
   headless output, event loop, VT pause/resume.
 - Phase 2: Vulkan instance/device/queue, command pools, fences, images, readback buffers,
   offscreen clear, DMA-BUF export, KMS framebuffer import, direct KMS presentation,
-  render pass, graphics pipeline, shaders, and fullscreen-triangle readback.
+  render pass, graphics pipeline, shaders, fullscreen-triangle readback, and shader
+  triangle presentation through DMA-BUF + KMS.
 - Phase 2 foundation: geometry/region damage merging, scene node tree, transactions,
   and unit tests for geometry and scene damage.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

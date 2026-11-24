@@ -75,4 +75,9 @@ class triangle_target {
                                           std::span<const std::byte> fragment_spirv) noexcept
     -> result<triangle_target>;
 
+[[nodiscard]] auto render_triangle_to_image(const device& device, void* native_image, u32 width_px,
+                                            u32 height_px, std::span<const std::byte> vertex_spirv,
+                                            std::span<const std::byte> fragment_spirv) noexcept
+    -> result<void>;
+
 }
