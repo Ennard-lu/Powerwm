@@ -1,69 +1,54 @@
 # ADR-0002: C++26 + GCC 16 + CMake/Ninja
 
-- 状态：Accepted（错误处理部分被 [ADR-0008](0008-no-exceptions.md) 替代）
-- 日期：2026-11-24
-- 决策者：powerwm 维护者
-- 相关：[coding-style.md](../coding-style.md)、[ci-cd.md](../ci-cd.md)
+- Status: Accepted (exception policy superseded by [ADR-0008](0008-no-exceptions.md))
+- Date: 2026-11-24
+- Owners: powerwm maintainers
+- Related: [coding-style.md](../coding-style.md), [ci-cd.md](../ci-cd.md)
 
-> **更新（2026-11-24）**：本文关于“异常不作为控制流”的描述已被 ADR-0008 强化为
-> **全项目 `-fno-exceptions`**。语言标准、编译器与构建系统决策仍然有效。
+> Update 2026-11-24: “exceptions not used as control flow” became a full
+> `-fno-exceptions` policy. Language, compiler, and build-system choices remain.
 
-## 背景
+## Context
 
-项目需要同时满足：
+The project needs low-level systems programming, protocol/property mapping, maintainability,
+and performance. The prototype already uses C++26 reflection with GCC 16.
 
-- 底层系统编程（fd、mmap、ioctl、指针生命周期）。
-- 大量协议与属性映射（Wayland opcode、DRM property、配置结构）。
-- 长期可维护、可测试、高性能。
-- 团队希望使用现代语言特性减少样板与错误。
+## Decision
 
-现有原型已经使用 C++26 反射（`std::meta`）做 DRM 属性映射，并依赖 GCC 16 的 `-freflection`。候选方案包括 C++23、Rust、Zig、C。
+1. C++26; primary compiler GCC 16+.
+2. CMake ≥3.25 + Ninja + presets.
+3. Recoverable errors use `std::expected<T, error>`; no exception control flow (now no
+   exceptions at all).
+4. All reflection is isolated in `base/meta.hpp`; core logic has a non-reflection fallback.
+5. Start with headers; evaluate C++26 modules in Phase 2, beginning with `base`.
+6. clang-format is mandatory; clang-tidy when it can parse C++26.
 
-## 决策
+## Consequences
 
-1. **语言标准：C++26**，主编译器 **GCC 16+**。
-2. **构建系统：CMake ≥ 3.25 + Ninja + CMake Presets**；CI 与本地使用同一套预设。
-3. **错误处理：运行期用 `std::expected<T, error>`**；异常不作为控制流（后续由 ADR-0008 强化为全项目 `-fno-exceptions`）。
-4. **反射隔离**：所有 `std::meta` 用法集中在 `base/meta.hpp`；核心逻辑必须提供非反射回退，避免工具链绑定。
-5. **模块化**：Phase 0 先使用头文件；C++26 模块在 Phase 2 于 `base` 试点，不强制全项目迁移。
-6. **静态分析**：clang-format 强制；clang-tidy 在支持 C++26 后逐步接入。
+### Positive
 
-## 后果
+- Reflection removes repetitive protocol/property/config mapping.
+- `expected`, spans, concepts, and ranges improve safety and clarity.
+- Presets keep local, CI, and container builds identical.
+- Native interop with Linux C libraries.
 
-### 正面
+### Negative
 
-- 反射可显著减少协议/属性/配置的重复映射代码。
-- `std::expected`、`std::span`、概念、ranges 提升表达力与安全性。
-- CMake Presets 让本地、CI、容器环境一致。
-- 与 Linux 系统库（libdrm、libinput、Wayland）天然 C ABI 互操作。
+- GCC 16 is new; contributors need the container or manual install.
+- Clang tooling may lag behind C++26.
+- Reflection may change; isolation is required.
 
-### 负面 / 代价
+## Alternatives
 
-- GCC 16 较新，发行版覆盖有限；贡献者需要容器或手动安装。
-- Clang 工具链（clang-tidy、clang-format 对 C++26 的解析）可能滞后。
-- 反射是编译器扩展/新标准特性，存在行为变化风险。
-- C++ 的生命周期与并发仍需要严格规范与评审。
-
-### 风险与缓解
-
-| 风险 | 缓解 |
-| --- | --- |
-| 工具链不稳定 | CI 固定 GCC 16 容器；本地提供 dev container |
-| 反射不可用 | `base/meta.hpp` 提供手写/生成回退 |
-| 贡献者环境差异 | Presets + 容器 + 明确的依赖列表 |
-| 新特性滥用 | 编码规范限制使用场景；代码审查 |
-
-## 备选方案
-
-| 方案 | 优点 | 缺点 | 为何未选 |
+| Option | Pros | Cons | Why not |
 | --- | --- | --- | --- |
-| C++23 | 工具链成熟、发行版覆盖好 | 缺少反射，协议/属性映射样板多 | 放弃项目希望利用的核心特性 |
-| Rust | 内存安全、生态活跃 | 与现有代码/团队技能不符；C ABI 互操作样板多 | 技术栈不符 |
-| Zig | 简洁、comptime 强 | 生态与 Wayland 绑定较弱 | 成熟度与团队熟悉度不足 |
-| C | 简单、可移植 | 手工生命周期管理成本高 | 长期维护成本过高 |
+| C++23 | mature tooling | no reflection; more boilerplate | gives up key feature |
+| Rust | memory safety | skill/code mismatch | wrong stack |
+| Zig | clean, comptime | weaker Wayland ecosystem | maturity |
+| C | portable | manual lifetime cost | long-term cost |
 
-## 重新审视条件
+## Revisit conditions
 
-- GCC 16 在目标发行版中长期不可获得，且容器方案无法满足贡献者。
-- 反射特性被移除或发生破坏性变更，导致迁移成本高于收益。
-- 模块化试点证明维护成本高于收益。
+- GCC 16 is unavailable in target distributions for a long period.
+- Reflection changes make migration costlier than its benefit.
+- Module migration proves more expensive than headers.

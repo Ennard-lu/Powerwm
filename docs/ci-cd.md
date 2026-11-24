@@ -1,20 +1,19 @@
-# powerwm CI/CD
+# CI/CD
 
-> 目标：**本地一条命令，CI 同一套流程；main 永远可构建、可测试、可发布。**
+> Goal: one local command, the same flow in CI; `main` is always buildable, testable, and
+> releasable.
 
-当前流水线文件：
+Files:
 
-- [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — 格式、Debug/Release/ASan+UBSan 构建与测试。
-- [`.github/workflows/release.yml`](../.github/workflows/release.yml) — 标签发布与打包。
-- [`CMakePresets.json`](../CMakePresets.json) — 本地与 CI 共用的构建预设。
-- [`containers/dev.Dockerfile`](../containers/dev.Dockerfile) — 可复现 GCC 16 环境。
-- [`.github/dependabot.yml`](../.github/dependabot.yml) — Actions 与容器依赖更新。
+- [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — format, policy, builds, tests.
+- [`.github/workflows/release.yml`](../.github/workflows/release.yml) — tagged releases.
+- [`CMakePresets.json`](../CMakePresets.json) — shared presets.
+- [`containers/dev.Dockerfile`](../containers/dev.Dockerfile) — reproducible GCC 16 environment.
+- [`.github/dependabot.yml`](../.github/dependabot.yml) — Actions/container updates.
 
-> 本文假设使用 GitHub Actions。若迁移到 GitLab CI/其他平台，保持**阶段与门禁**不变，只替换执行器。
+This assumes GitHub Actions. Other CI systems should preserve the same gates.
 
----
-
-## 1. 流水线总览
+## 1. Pipeline
 
 ```mermaid
 flowchart LR
@@ -24,307 +23,217 @@ flowchart LR
     B --> D[dev]
     B --> R[release]
     B --> A[asan + ubsan]
-    F --> G{全部通过?}
+    F --> G{All green?}
     P --> G
     D --> G
     R --> G
     A --> G
-    G -->|是| M[允许合并]
-    G -->|否| X[阻断]
-    T[Tag v*] --> RB[Release 构建]
-    RB --> P[打包 + SHA256]
-    P --> GH[GitHub Release]
+    G -->|yes| M[Merge]
+    G -->|no| X[Block]
+    T[Tag v*] --> RB[Release build]
+    RB --> PKG[Package + SHA256]
+    PKG --> GH[GitHub Release]
 ```
 
-### 任务矩阵
-
-| 任务 | 预设 | 内容 | 阻断合并 |
+| Job | Preset | Content | Blocking |
 | --- | --- | --- | --- |
-| `format` | — | `clang-format --dry-run --Werror` | 是 |
-| `policy` | — | 禁止异常 / libwayland / 裸 C API / `int32_t` | 是 |
-| `build (dev)` | `dev` | Debug 构建 + CTest | 是 |
-| `build (release)` | `release` | Release 构建 + CTest | 是 |
-| `build (asan)` | `asan` | ASan + UBSan 构建 + CTest | 是 |
-| `release` | `release` | 标签构建、打包、发布 | 发布阻断 |
+| `format` | — | `clang-format --dry-run --Werror` | yes |
+| `policy` | — | no exceptions/libwayland/bare C API/`int32_t`/comments | yes |
+| `build (dev)` | `dev` | Debug build + CTest | yes |
+| `build (release)` | `release` | Release build + CTest | yes |
+| `build (asan)` | `asan` | ASan + UBSan build + CTest | yes |
+| `release` | `release` | tag build, package, publish | release-blocking |
 
-触发条件：
+Triggers: push to `main`/`master`, pull requests, daily cron, manual dispatch, `v*` tags.
+Concurrent runs for the same ref are cancelled.
 
-- `push` 到 `main`/`master`；
-- 任意 `pull_request`；
-- 每日 `03:17 UTC` 定时构建（捕捉依赖/工具链漂移）；
-- 手动 `workflow_dispatch`；
-- `v*` 标签触发发布。
+## 2. Presets
 
-并发策略：同一分支/PR 的新构建会取消旧构建（`cancel-in-progress: true`）。
-
----
-
-## 2. 构建预设
-
-| 预设 | 构建类型 | 用途 | 关键参数 |
+| Preset | Type | Purpose | Key flags |
 | --- | --- | --- | --- |
-| `dev` | Debug | 日常开发 | 断言开启、符号完整 |
-| `release` | Release | 打包、性能测试 | 优化开启 |
-| `asan` | Debug | CI 消毒器 | `-fsanitize=address,undefined -fno-sanitize-recover=all` |
-
-本地命令：
+| `dev` | Debug | daily development | assertions, symbols |
+| `release` | Release | packaging/performance | optimization |
+| `asan` | Debug | sanitizers | `-fsanitize=address,undefined -fno-sanitize-recover=all` |
 
 ```bash
-# 配置 + 构建 + 测试（推荐日常）
 cmake --preset dev
 cmake --build --preset dev
 ctest --preset dev --output-on-failure
 
-# Release
 cmake --preset release
 cmake --build --preset release
 ctest --preset release --output-on-failure
 
-# ASan + UBSan
 cmake --preset asan
 cmake --build --preset asan
 ctest --preset asan --output-on-failure
 ```
 
-所有构建输出位于 `build/<preset>/`，不污染源码树。
+All builds go to `build/<preset>/`. All presets use
+`add_compile_options(-fno-exceptions)`.
 
-所有预设都通过 CMake 的 `add_compile_options(-fno-exceptions)` 禁用异常；这是硬性规则，不因本地构建方式改变。
+### Environment
 
-### 2.1 构建元数据
+| Variable | Effect |
+| --- | --- |
+| `ASAN_OPTIONS=detect_leaks=1:abort_on_error=1` | leak detection, abort on error |
+| `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1` | stop on UB, print stack |
+| `CC` / `CXX` | compiler selection |
 
-`cmake/PowerWMBuildInfo.cmake` 在配置阶段采集并生成 `powerwm/build_info.hpp`：
+CI uses `gcc:16` and installs `libdrm-dev`, `libinput-dev`, `libseat-dev`, `libudev-dev`,
+`libvulkan-dev`, `vulkan-validationlayers`, `mesa-vulkan-drivers`. It does not install or
+link libwayland.
 
-- 项目版本；
-- git commit（完整/短）、分支、`git describe`、dirty 状态；
-- UTC 构建时间；
-- 构建类型、编译器 id/版本/路径、生成器、C++ 标准；
-- 编译参数、构建目录、启用特性、目标系统与处理器。
+### Build metadata
 
-本地查看：
+`cmake/PowerWMBuildInfo.cmake` generates `powerwm/build_info.hpp` with:
+
+- version;
+- full/short git commit, branch, describe, dirty state;
+- UTC build time;
+- build type, compiler id/version/path, generator, C++ standard;
+- flags, build directory, features, target system/processor.
 
 ```bash
-cmake --preset dev
-cmake --build --preset dev
 ./build/dev/powerwm --build-info
 ```
 
-`.git/HEAD` 与当前分支 ref 被加入 `CMAKE_CONFIGURE_DEPENDS`，提交后再次构建会自动刷新元数据。无 `.git` 时字段回退为 `unknown`。
+`.git/HEAD` and the current branch ref are configure dependencies, so commits refresh the
+metadata. Missing `.git` falls back to `unknown`.
 
-### 环境变量
-
-| 变量 | 作用 |
-| --- | --- |
-| `ASAN_OPTIONS=detect_leaks=1:abort_on_error=1` | 开启泄漏检测，错误即中止 |
-| `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1` | UB 立即失败并打印栈 |
-| `CC` / `CXX` | 指定编译器（默认 GCC 16） |
-
-CI 默认使用官方 `gcc:16` 容器；当前安装 `libdrm-dev`、`libinput-dev`、`libseat-dev`、`libudev-dev`、`libvulkan-dev`、`vulkan-validationlayers`、`mesa-vulkan-drivers`。**不安装、不链接 `libwayland-*`。**
-
----
-
-## 3. 格式门禁
+## 3. Format and policy gates
 
 ```bash
-# 本地修复
 clang-format -i $(git ls-files '*.cpp' '*.hpp' '*.h')
-
-# 本地检查（与 CI 一致）
 clang-format --dry-run --Werror $(git ls-files '*.cpp' '*.hpp' '*.h')
-```
 
-- 版本固定为 `23.1.5`（见 CI）；不同版本可能产生不同换行，**以 CI 为准**。
-- 格式变更单独提交，避免与逻辑变更混在一起。
-- 不要用 `// clang-format off` 逃避；确有必要时注明原因与范围。
-
-### 3.1 策略门禁
-
-```bash
 bash tools/check_policy.sh
 python3 tools/check_comments.py
 ```
 
-检查项：
+Policy checks:
 
-| 规则 | 失败示例 |
+| Rule | Violation example |
 | --- | --- |
-| 无 libwayland | `#include <wayland-server.h>` |
-| 无异常 | `try { ... } catch (...)`、`throw` |
-| 使用 `pwm` 整数别名 | `std::uint32_t id`（`types.hpp` 除外） |
-| C API 封装 | 业务层直接 `::open()`、`drmMode*()`、`vkCreate*()` |
-| C 头隔离 | `scene/` 中 `#include <drm/...>` |
-| 注释策略 | 禁止解释性注释；只允许英文 `///` / `/**` API 文档注释 |
+| no libwayland | `#include <wayland-server.h>` |
+| no exceptions | `try`, `catch`, `throw` |
+| integer aliases | `std::uint32_t id` (except `types.hpp`) |
+| C API wrapping | bare `::open()`, `drmMode*()`, `vkCreate*()` in business code |
+| C header isolation | `#include <drm/...>` in `scene/` |
+| comments | explanatory comments; non-English API docs |
 
-封装层白名单：`src/base/`、`src/platform/`、`src/render/vulkanpp/`。
+Wrapper allowlist: `src/base/`, `src/platform/`, `src/render/vulkanpp/`.
 
----
+clang-format is pinned to `23.1.5`; different versions may reflow differently.
 
-## 4. 静态分析与未来门禁
+## 4. Static analysis and future gates
 
-| 门禁 | 状态 | 说明 |
+| Gate | Status | Notes |
 | --- | --- | --- |
-| clang-format | 已启用 | 阻断 |
-| 仓库策略扫描 | 已启用 | 阻断：无异常、无 libwayland、C API 封装、整数别名 |
-| 编译器警告 | Phase 0 | 先清理，再启用 `-Werror` |
-| clang-tidy | Phase 0/1 | Clang 尚不能解析 C++26 反射；先在非反射文件启用 |
-| 单元/集成测试 | Phase 0 | CTest 骨架已就绪 |
-| 金图测试 | Phase 2 | headless 渲染确定性输出 |
-| 性能基准 | Phase 2 | 阈值比较，防回归 |
-| 模糊测试 | Phase 3 | 每日/发布前运行 |
-| 硬件冒烟 | Phase 1 | 自托管 runner 或手动发布检查 |
+| clang-format | enabled | blocking |
+| policy scan | enabled | blocking |
+| compiler warnings | Phase 0 | clean, then `-Werror` |
+| clang-tidy | Phase 0/1 | Clang cannot parse C++26 reflection yet |
+| unit/integration | Phase 0 | CTest live |
+| golden images | Phase 2 | deterministic headless output |
+| benchmarks | Phase 2 | threshold comparisons |
+| fuzzing | Phase 3 | daily/release |
+| hardware smoke | Phase 1 | self-hosted runner or manual |
 
-> 原则：**先建立基线，再设阻断**。没有基线的告警数不胜数，直接 `-Werror` 只会让人绕过 CI。
+## 5. Branching
 
----
+- Trunk-based; `main` always green.
+- Branch names: `feat/<scope>-<topic>`, `fix/...`, `docs/...`, `ci/...`.
+- PRs under 400 effective lines; squash merge; Conventional Commits.
+- `release/0.x` only when maintaining an old line.
 
-## 5. 分支与合并策略
+Branch protection:
 
-采用 trunk-based development：
-
-```text
-main ──●──●──────●──────●──►
-        \        /        \
-         ●──●──●          ●──●  (短生命周期分支 / PR)
-```
-
-- `main` 始终可构建、可测试；不直接推送，必须走 PR。
-- 分支命名：`feat/<scope>-<short>`、`fix/<scope>-<short>`、`docs/<topic>`、`ci/<topic>`。
-- PR 尽量小（< 400 行有效变更），一个 PR 只做一件事。
-- 合并方式：squash merge（保持线性历史）；提交信息遵循 Conventional Commits。
-- 发布分支：仅在需要维护旧版本时创建 `release/0.x`，否则直接用标签。
-
-### 建议的分支保护
-
-| 设置 | 值 |
+| Setting | Value |
 | --- | --- |
-| Require pull request | 是 |
-| Required approvals | 1（核心模块 2） |
-| Required status checks | `Format (clang-format)`、`Policy`、`Build & Test (dev)`、`Build & Test (release)`、`Build & Test (asan)` |
-| Require branches up to date | 是 |
-| Require conversation resolution | 是 |
-| Allow force push | 否 |
-| Allow deletions | 否 |
+| Require PR | yes |
+| Approvals | 1 (2 for core) |
+| Required checks | `Format (clang-format)`, `Policy`, `Build & Test (dev)`, `Build & Test (release)`, `Build & Test (asan)` |
+| Up-to-date branch | yes |
+| Conversation resolution | yes |
+| Force push | no |
+| Deletion | no |
 
----
+## 6. Releases
 
-## 6. 发布流程
+Pre-1.0 uses `0.x.y`:
 
-### 版本号
+- `0.x.0` for phase milestones;
+- `0.x.y` for fixes;
+- SemVer after 1.0.
 
-预发布阶段使用 `0.x.y`：
-
-- `0.x.0`：阶段里程碑（例如 Phase 3 完成）。
-- `0.x.y`：修复与兼容改进。
-- 1.0 后遵循 SemVer；ABI/配置兼容策略见 `CHANGELOG.md`。
-
-### 步骤
-
-1. 确认 `main` 全绿，性能与兼容性检查完成。
-2. 更新 `CHANGELOG.md`（新增、变更、修复、破坏性变更）。
-3. 打标签并推送：
+1. Ensure `main` is green and validation passed.
+2. Update `CHANGELOG.md`.
+3. Tag and push:
 
 ```bash
-git tag -a v0.1.0 -m "powerwm v0.1.0: stable KMS bring-up"
+git tag -a v0.1.0 -m "powerwm v0.1.0"
 git push origin v0.1.0
 ```
 
-4. `release.yml` 自动执行：
-   - Release 构建与测试；
-   - 打包 `powerwm-<version>-linux-x86_64.tar.gz`；
-   - 生成 `SHA256SUMS`；
-   - 创建 GitHub Release 并附发布说明。
-5. 下载产物，在干净环境验证安装/运行。
-6. 需要时补充发行版包（AUR、Debian、COPR），Phase 6 接入。
+4. `release.yml` builds, tests, packages, writes `SHA256SUMS`, and creates the release.
+5. Verify the artifact in a clean environment.
+6. Add distribution packages in Phase 6.
 
-> 当前 Phase 0 打包应用骨架 `powerwm` 与点灯工具 `powerwm_drm_bringup`；发布说明必须明确“不可日常使用”。
+Rollback: revert code via PR, delete/publish a corrected tag, document broken artifacts.
 
-### 回滚
+## 7. Dependencies
 
-- 代码回滚：`git revert` 并走正常 PR；不要强推 `main`。
-- 发布回滚：删除错误标签/Release，发布新的补丁版本；已下载产物无法召回，必须在说明中标注。
-- 配置破坏性变更：提供迁移脚本与至少一个版本的弃用警告。
+- System libraries from distribution packages; CI pins the base image.
+- Header-only libraries via `FetchContent` with tag/commit and SHA256.
+- No vendored third-party source without license/audit review.
+- Dependency updates are separate PRs with tests and impact notes.
+- Dependabot checks Actions and the dev container weekly.
 
----
+## 8. Caching and artifacts
 
-## 7. 依赖管理
+Phase 0 does not use ccache. Later:
 
-- 系统库（libdrm、libinput、Vulkan loader、mesa-vulkan-drivers）：使用发行版包，CI 容器固定基础镜像。
-- 头文件库（如 `toml++`）：`FetchContent` + 固定 tag/commit + SHA256。
-- 不在仓库中提交第三方源码，除非许可证与审计要求。
-- 升级依赖必须单独 PR，说明变更、测试与性能影响。
-- Dependabot 每周检查 GitHub Actions 与开发容器基础镜像。
+- ccache keyed by compiler version and preset;
+- test artifacts: JUnit, coverage, golden diffs, 14 days;
+- release artifacts: permanent in GitHub Releases.
 
----
+## 9. Security
 
-## 8. 缓存与产物
+- `ci.yml` uses `contents: read`.
+- `release.yml` uses `contents: write` only for tags.
+- No secrets in PR builds; no tokens in logs.
+- Fork PRs do not run write-permission steps.
+- Signing (GPG/Sigstore) in Phase 7.
 
-Phase 0 暂不启用编译缓存（项目小，缓存维护成本更高）。Phase 1 起计划：
-
-- `ccache`：缓存 `build/*/CMakeFiles` 的编译结果，键包含编译器版本与预设。
-- CMake 配置缓存：缓存 `~/.cache/cmake`（谨慎，易产生脏状态）。
-- 测试产物：JUnit XML、覆盖率、金图差异图，保留 14 天。
-- 发布产物：永久保留在 GitHub Release。
-
----
-
-## 9. 安全与权限
-
-- `ci.yml` 使用 `permissions: contents: read`，最小权限。
-- `release.yml` 仅在标签触发时需要 `contents: write`。
-- 不在 PR 构建中注入 secrets；不在日志中打印 token。
-- 来自 fork 的 PR 不自动运行需要写权限的步骤。
-- 发布签名（GPG/Sigstore）在 Phase 7 接入。
-
----
-
-## 10. 本地复现 CI
-
-### 使用容器（推荐）
+## 10. Reproducing CI locally
 
 ```bash
 docker build -t powerwm-dev -f containers/dev.Dockerfile .
 docker run --rm -it -v "$PWD:/workspace" -w /workspace powerwm-dev
 
-# 容器内
 cmake --preset dev && cmake --build --preset dev && ctest --preset dev --output-on-failure
 ```
 
-### 不使用容器
+Native requirements: `g++ >= 16`, CMake >= 3.25, Ninja, pkg-config, libdrm.
 
-确保：
+## 11. Troubleshooting
 
-```bash
-g++ --version   # >= 16
-cmake --version # >= 3.25
-ninja --version
-pkg-config --modversion libdrm
-```
-
-然后运行与 CI 相同的三条命令。
-
----
-
-## 11. 排障
-
-| 现象 | 可能原因 | 处理 |
+| Symptom | Cause | Fix |
 | --- | --- | --- |
-| `-freflection` 未识别 | 编译器不是 GCC 16+ | 使用容器或安装 GCC 16 |
-| `FindLibdrm` 失败 | 缺少 `libdrm-dev` / pkg-config | 安装开发包，检查 `pkg-config --modversion libdrm` |
-| 格式检查失败但本地通过 | clang-format 版本不同 | 使用 CI 固定版本 `23.1.5` |
-| CTest 找不到测试 | 未启用 `include(CTest)` 或未构建 | 重新配置；Phase 0 后会有实际测试 |
-| ASan 报泄漏 | 全局缓存/第三方库 | 先确认是否真实泄漏；必要时添加有注释的抑制 |
-| 容器内 checkout 失败 | 镜像缺少 git/ca-certificates | 在 checkout 前安装依赖（当前流程已处理） |
+| `-freflection` unknown | compiler older than GCC 16 | use container or install GCC 16 |
+| `FindLibdrm` fails | no libdrm-dev/pkg-config | install and check `pkg-config --modversion libdrm` |
+| format fails locally | clang-format version differs | use 23.1.5 |
+| CTest finds no tests | no `include(CTest)`/build | reconfigure and build |
+| ASan leak | real leak or global cache | verify, then add documented suppression |
+| checkout fails in container | no git/ca-certificates | install before checkout |
 
----
+## 12. Future work
 
-## 12. 后续增强
-
-按阶段逐步加入，避免一次性堆叠复杂度：
-
-- [ ] Phase 0：编译器警告基线 + `-Werror`；clang-tidy（非反射文件）。
-- [ ] Phase 0：测试报告与覆盖率上传。
-- [ ] Phase 1：真实硬件自托管 runner 冒烟（DRM/KMS、VT 切换）。
-- [ ] Phase 2：headless 金图测试与性能基准阈值。
-- [ ] Phase 3：Wayland 协议模糊测试（每日）。
-- [ ] Phase 5：文档站点与截图预览。
-- [ ] Phase 6：多发行版打包（AUR/Debian/COPR）。
-- [ ] Phase 7：可复现构建、产物签名、SBOM。
+- Phase 0: warnings as errors; clang-tidy on non-reflection files; test reports/coverage.
+- Phase 1: self-hosted hardware runner; resource/fd checks.
+- Phase 2: golden images and benchmark thresholds.
+- Phase 3: daily protocol fuzzing.
+- Phase 5: docs site and screenshots.
+- Phase 6: AUR/Debian/COPR packaging.
+- Phase 7: reproducible builds, signing, SBOM.

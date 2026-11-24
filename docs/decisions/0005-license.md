@@ -1,61 +1,38 @@
-# ADR-0005: 许可证选择（待定）
+# ADR-0005: License selection (pending)
 
-- 状态：Superseded by [ADR-0010](0010-apache-2-0.md)
-- 日期：2026-11-24
-- 决策者：项目维护者（待确认）
-- 相关：[README.md](../../README.md)、[CONTRIBUTING.md](../../CONTRIBUTING.md)
+- Status: Superseded by [ADR-0010](0010-apache-2-0.md)
+- Date: 2026-11-24
+- Owners: project maintainers
+- Related: [README.md](../../README.md), [CONTRIBUTING.md](../../CONTRIBUTING.md)
 
-> **已被 ADR-0010 替代（2026-11-24）**：项目最终选择 Apache-2.0。
-> 本文保留候选方案与权衡，作为历史记录。
+> Superseded 2026-11-24: Apache-2.0 was chosen. This record keeps the alternatives.
 
-## 背景
+## Context
 
-powerwm 计划长期开源，并可能被发行版打包、被下游修改、被商业环境使用。许可证会影响：
+The license affects distribution adoption, contribution obligations, patent terms, and
+compatibility with Linux/Wayland dependencies. The repository originally had no `LICENSE`.
 
-- 下游发行版与商业公司的采用意愿；
-- 贡献者是否必须回馈修改；
-- 与 Wayland/libdrm/libinput 等依赖的兼容性；
-- 是否需要对二进制分发提供专利授权。
+## Candidates
 
-当前仓库尚未包含 `LICENSE` 文件，README 标注为 TBD。在正式选定前，不应进行需要明确授权的分发。
-
-## 候选方案
-
-| 方案 | 优点 | 缺点 | 适用倾向 |
+| Option | Pros | Cons | Bias |
 | --- | --- | --- | --- |
-| MIT | 极简、生态友好、采用门槛低 | 无专利条款；不强制回馈 | 希望最大化采用 |
-| Apache-2.0 | 明确专利授权、贡献条款清晰 | 与 GPLv2 兼容性需注意；文本较长 | 企业友好、专利敏感 |
-| MIT OR Apache-2.0 | 下游可二选一，兼顾两类需求 | 双许可证管理稍复杂 | Rust 生态常见做法 |
-| GPL-3.0-or-later | 强制回馈、保护用户自由 | 商业采用与部分下游受限 | 强调社区与开源持续性 |
-| LGPL-3.0-or-later | 库可被更广泛链接 | 合成器整体仍可能被视为衍生作品 | 库与可执行分离时考虑 |
+| MIT | minimal, adoption-friendly | no patent grant | maximize adoption |
+| Apache-2.0 | patent grant, clear contribution terms | longer; GPLv2 compatibility care | enterprise-friendly |
+| MIT OR Apache-2.0 | downstream choice | dual-license management | Rust-style |
+| GPL-3.0-or-later | requires reciprocity | limits some adoption | community protection |
+| LGPL-3.0-or-later | library-friendly | compositor derivation questions | library split |
 
-## 倾向（未定）
+## Consequences
 
-- 若目标是**最大化采用与贡献**：`MIT OR Apache-2.0`。
-- 若目标是**确保下游回馈**：`GPL-3.0-or-later`。
-- 无论选择哪种，都需要：
-  1. 在根目录添加 `LICENSE`；
-  2. 在源文件头部或 `REUSE` 配置中声明 SPDX 标识；
-  3. 检查 vendored 协议 XML 与第三方代码的许可证兼容性；
-  4. 更新 `CONTRIBUTING.md` 中的贡献授权说明。
+- A clear license removes legal uncertainty.
+- SPDX identifiers enable automated auditing.
+- Changing a license after release needs all contributors' agreement.
 
-## 后果
+## Questions before deciding
 
-### 正面
+1. Is closed-source commercial use acceptable?
+2. Must downstream modifications be published?
+3. Is an explicit patent grant required?
+4. Should libraries and the compositor use different licenses?
 
-- 明确的许可证降低贡献者与下游的法律不确定性。
-- SPDX 标识可被工具链自动审计。
-
-### 负面 / 代价
-
-- 一旦发布后再更改许可证，需要所有贡献者同意（或采用 CLA/DCO 之外的重新授权机制）。
-- 强 copyleft 可能减少商业采用；宽松许可证可能无法保证回馈。
-
-## 决策前需要确认
-
-1. 项目是否接受商业闭源使用？
-2. 是否要求下游修改必须开源？
-3. 是否需要明确的专利授权条款？
-4. 是否计划将核心库与合成器分别授权？
-
-在得到明确答案前，本 ADR 保持 `Proposed`，仓库不添加 `LICENSE` 文件。
+This ADR remained `Proposed` until replaced by ADR-0010.

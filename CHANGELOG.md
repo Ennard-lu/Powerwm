@@ -1,57 +1,55 @@
 # Changelog
 
-本文件记录 powerwm 的重要变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
-版本号遵循预发布阶段的 `0.x.y` 约定（1.0 后使用 SemVer）。
+All notable changes to powerwm are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); release versions follow the
+pre-1.0 `0.x.y` convention.
 
 ## [Unreleased]
 
 ### Added
 
-- Phase 0 工程化文档：路线图、架构、编码规范、测试策略、CI/CD、ADR。
-- CMake Presets：`dev`、`release`、`asan`。
-- GitHub Actions：格式检查、策略扫描、Debug/Release/ASan+UBSan 构建与测试、标签发布骨架。
-- 可复现开发容器 `containers/dev.Dockerfile`（GCC 16 + Vulkan）。
-- CTest 冒烟测试与正式测试目录结构。
-- `.clang-format`、`.clang-tidy`、`.editorconfig`、`.gitignore`。
-- `tools/check_policy.sh`：无异常、无 libwayland、C API 封装、整数别名检查。
-- `tools/check_comments.py`：禁止解释性注释，只允许英文 API 文档注释与 SPDX。
-- `cmake/PowerWMBuildInfo.cmake`：生成 git commit、分支、构建时间、编译器与参数元数据。
-- `powerwm --build-info`：打印构建元数据。
-- Phase 1 起点：主输出选择、原子模式设置、双缓冲 page flip 动画、`poll` 事件等待封装。
-- libinput/libudev 封装与 `powerwm_input_probe` 输入事件探针。
-- libseat 会话封装与 `powerwm_seat_probe`，支持设备打开与 enable/disable 事件。
-- DRM 点灯工具通过 seat 打开设备，VT disable 时暂停，enable 后恢复 master 与提交。
-- 多 fd `poll` 事件循环、`eventfd`/`timerfd` 封装与事件循环单元测试。
-- DRM 点灯工具改为事件驱动：DRM fd、timerfd、seat dispatch、input fd 共用循环。
-- udev DRM 热插拔监控与输出运行时重启。
-- headless 输出骨架与单元测试。
-- `powerwm_probe` 只读输出诊断。
-- TTY3 硬件验证：1200 帧 page flip 动画、10 次 VT 来回切换通过；修复 libdrm 属性计数返回值、page flip 回调上下文、周期 timerfd、seat master 恢复与热插拔事件过滤。
-- Phase 2 起步：`vulkanpp` Instance/Device/Queue RAII 与 `powerwm_vulkan_probe`。
-- `vulkanpp` command pool / command buffer / fence / queue submit，并在探针中完成空命令提交。
-- `vulkanpp` image / readback buffer / offscreen clear+readback；探针验证 RGBA clear 像素。
-- Vulkan DMA-BUF 导出与 KMS framebuffer 导入；`powerwm_vulkan_dmabuf_probe` 验证 64x64 图像导入。
-- `powerwm_vulkan_kms_demo` 将 Vulkan 离屏图像经 DMA-BUF 直接通过 KMS page flip 显示；TTY3 实测通过。
-- ADR-0013：C API 封装假定对象合法，移除封装层 null/valid 防护；`raii` 不再检查 `valid()`。
-- 依赖 DRM device 的资源改由 `device::create_*` 创建；统一使用 `auto foo() -> T` 函数声明风格。
-- 英文 README；中文 README 移至 `docs/README.zh-CN.md`。
-- Apache-2.0 `LICENSE` 与 SPDX 文件头。
-- ADR-0006 ~ ADR-0012：自研协议栈、Vulkan/vulkanpp、无异常、C API 封装、许可证、命名空间、依赖资源创建。
+- Phase 0 engineering foundation: roadmap, architecture, coding style, testing strategy,
+  CI/CD, and ADRs.
+- CMake presets: `dev`, `release`, `asan`.
+- GitHub Actions: format, policy, Debug/Release/ASan+UBSan builds, tests, release skeleton.
+- Reproducible development container with GCC 16 and Vulkan.
+- CTest smoke tests plus event-loop and headless output tests.
+- `.clang-format`, `.clang-tidy`, `.editorconfig`, `.gitignore`.
+- `tools/check_policy.sh`: no exceptions, no leeway for libwayland, C API wrapping,
+  integer aliases.
+- `tools/check_comments.py`: no explanatory comments; English API docs and SPDX only.
+- Apache-2.0 `LICENSE` and SPDX headers.
+- ADR-0006 through ADR-0013: in-tree protocol stack, Vulkan/vulkanpp, no exceptions,
+  C API wrapping, license, namespace/integers, dependent resources, valid-object contract.
+- `cmake/PowerWMBuildInfo.cmake`: git commit, branch, dirty state, UTC build time,
+  compiler, flags, features.
+- `powerwm --build-info` prints build metadata.
+- English README; Chinese README moved to `docs/README.zh-CN.md`.
+- Phase 1: DRM/KMS page flips, double buffering, libinput, libseat, udev hotplug,
+  headless output, event loop, VT pause/resume.
+- Phase 2: Vulkan instance/device/queue, command pools, fences, images, readback buffers,
+  offscreen clear, DMA-BUF export, KMS framebuffer import, and direct KMS presentation.
+- Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
+  `powerwm_input_probe`, `powerwm_seat_probe`.
 
 ### Changed
 
-- 全仓库 C++ 代码按新 `.clang-format` 统一格式（不改变行为）。
-- 目录重构：`helpers → base`、`libdrmpp → platform/drm`、`libgbmpp → platform/gbm`、应用入口 → `app/`、点灯工具 → `tools/`。
-- `powerwm` 应用骨架与 `powerwm_core` 静态库拆分完成。
-- `main()` 拆分为小型具名函数；业务代码函数 ≤ 60 行、嵌套 ≤ 5 层。
-- 移除未使用的 `counted` 与 `placeholder`。
-- 根命名空间从 `bc` 迁移为 `pwm`；`LIBDRMPP_*` 宏迁移为 `PWM_*`。
-- 定宽整数别名成为项目规范：`pwm::i32` / `u32` / `usize` 等。
-- 启用 `-fno-exceptions`；错误模型定为错误码 + `pwm::result<T>`。
-- 渲染与协议方向更新：Vulkan + `vulkanpp`；自研 Wayland wire protocol + 协程，不依赖 libwayland。
+- C++ sources formatted with the repository `.clang-format`.
+- Root namespace migrated from `bc` to `pwm`; `LIBDRMPP_*` macros to `PWM_*`.
+- Fixed-width aliases (`pwm::i32`, `u32`, `usize`, ...) are project-wide.
+- `-fno-exceptions` enabled; errors use `pwm::result<T>` and error codes.
+- Renderer direction: Vulkan + `vulkanpp`; protocol direction: in-tree wire protocol +
+  coroutines; no libwayland.
+- C API wrappers no longer validate object legality; callers guarantee valid objects.
+- Named functions use trailing return types (`auto foo() -> T`).
+- Root README simplified to features, goals, and status.
+- Documentation translated to English except `docs/README.zh-CN.md`.
 
 ### Known limitations
 
-- 仍为 DRM/KMS 点灯原型；`powerwm` 仅应用骨架，不可日常使用。
-- 未实现 Wayland 协议、窗口管理、Vulkan 渲染器、输入路由。
-- 渲染器、协议栈、窗口管理尚未实现。
+- Not usable as a daily desktop yet.
+- Wayland protocol stack, scene graph, tiling policy, and shell are not implemented.
+- Output selection uses the first connected connector and first plane; compatibility
+  matching is incomplete.
+- Hotplug restarts the output runtime rather than preserving client state.
+- HDR, VRR, multi-GPU, and full color management are future work.

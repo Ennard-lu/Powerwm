@@ -1,59 +1,52 @@
-# powerwm 文档
+# powerwm documentation
 
-本目录保存 powerwm 的长期设计、规范与流程。代码会变，决策与约束应当可追溯。
+This directory contains the long-term design, engineering rules, validation notes, and
+decision records for powerwm. Code changes; decisions and constraints must remain traceable.
 
-## 阅读顺序
+## Reading order
 
-| 顺序 | 文档 | 适合谁 | 你将了解 |
+| Order | Document | Audience | What you will learn |
 | --- | --- | --- | --- |
-| 0 | [README.zh-CN.md](README.zh-CN.md) | 所有人 | 中文版项目总览 |
-| 1 | [roadmap.md](roadmap.md) | 所有人 | 项目要去哪、每个阶段交付什么、如何判断完成 |
-| 2 | [architecture.md](architecture.md) | 贡献者 | 分层、线程模型、帧生命周期、目录规划 |
-| 3 | [coding-style.md](coding-style.md) | 贡献者 | 如何写出一致、可维护的 C++26 |
-| 4 | [testing.md](testing.md) | 贡献者 | 如何证明改动正确、性能是否退化 |
-| 5 | [ci-cd.md](ci-cd.md) | 维护者 | 流水线如何运行、如何发布、如何排障 |
-| 6 | [phase-1-validation.md](phase-1-validation.md) | 硬件验证者 | Phase 1 验收步骤与当前结果 |
-| 7 | [decisions/](decisions/) | 所有人 | 关键选型的背景、取舍与后果 |
+| 0 | [README.zh-CN.md](README.zh-CN.md) | Chinese readers | Chinese project overview (the only Chinese document) |
+| 1 | [roadmap.md](roadmap.md) | Everyone | Where the project is going and how each phase is judged |
+| 2 | [architecture.md](architecture.md) | Contributors | Layers, threading, frame lifecycle, directory plan |
+| 3 | [coding-style.md](coding-style.md) | Contributors | How to write consistent, maintainable C++26 |
+| 4 | [testing.md](testing.md) | Contributors | How correctness and performance are proven |
+| 5 | [ci-cd.md](ci-cd.md) | Maintainers | How pipelines, gates, and releases work |
+| 6 | [phase-1-validation.md](phase-1-validation.md) | Hardware testers | Phase 1 acceptance steps and current results |
+| 7 | [decisions/](decisions/) | Everyone | Why key choices were made and what they cost |
 
-## 文档约定
+## Conventions
 
-- 文档使用中文为主，代码标识符、协议名、命令保持英文。
-- 架构级决策必须新增 ADR，而不是只改聊天记录或提交信息。
-- 文档中的性能目标必须写明测量条件；没有测量条件的数字视为口号。
-- 过期文档要么更新，要么在文首标注 **Deprecated** 并指向替代文档。
-- 图表优先使用 Mermaid，保证在 GitHub/GitLab 上可直接渲染。
+- English is the primary language for code, comments, commits, and documentation.
+- `README.zh-CN.md` is the only Chinese document and is kept for accessibility.
+- Architecture-level changes require an ADR in `decisions/`.
+- Performance claims must state hardware, scenario, and measurement method.
+- Outdated documents are either updated or marked **Deprecated** with a replacement link.
+- Diagrams use Mermaid so GitHub and GitLab render them directly.
 
-## 目录
+## Directory
 
 ```text
 docs/
-├── README.md              # 本文件
-├── roadmap.md             # 路线图与里程碑
-├── architecture.md        # 系统架构
-├── coding-style.md        # 编码规范
-├── testing.md             # 测试与性能策略
-├── phase-1-validation.md  # Phase 1 硬件验收
-├── ci-cd.md               # 持续集成与发布
+├── README.md                 # This index
+├── README.zh-CN.md           # The only Chinese document
+├── roadmap.md                # Phases, milestones, risks
+├── architecture.md           # System design
+├── coding-style.md           # C++26 rules
+├── testing.md                # Test and performance strategy
+├── ci-cd.md                  # Pipelines and releases
+├── phase-1-validation.md     # Hardware acceptance record
 └── decisions/
-    ├── README.md          # ADR 索引与模板
+    ├── README.md             # ADR index and template
     ├── 0001-native-compositor.md
-    ├── 0002-cxx26-toolchain.md
-    ├── 0003-renderer-backend.md
-    ├── 0004-config-and-ipc.md
-    ├── 0005-license.md
-    ├── 0006-own-wayland-protocol.md
-    ├── 0007-vulkan-vulkanpp.md
-    ├── 0008-no-exceptions.md
-    ├── 0009-c-api-wrapping.md
-    ├── 0010-apache-2-0.md
-    ├── 0011-namespace-and-integers.md
-    ├── 0012-dependent-resource-creation.md
+    ├── ...
     └── 0013-c-api-assumes-valid.md
 ```
 
-## 文档维护规则
+## Maintenance
 
-1. **先决策，后实现**：影响多个模块的选择先写 ADR。
-2. **ADRs 不删除**：被替代时保留原文，状态改为 `Superseded by ADR-XXXX`。
-3. **路线图按季度审视**：调整阶段顺序需要在 PR 中说明原因。
-4. **规范可执行**：能用 clang-format、clang-tidy、CI 强制的内容，不靠口头约定。
+1. Decide first, implement second: write an ADR for cross-module choices.
+2. ADRs are never deleted. Mark them `Superseded by ADR-XXXX` instead.
+3. Review the roadmap quarterly; explain reordering in the PR.
+4. Prefer executable rules: formatting, policy scripts, and CI over verbal conventions.

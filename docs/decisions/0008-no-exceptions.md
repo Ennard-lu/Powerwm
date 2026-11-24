@@ -1,72 +1,54 @@
-# ADR-0008: 禁用异常，使用错误码
+# ADR-0008: No exceptions; use error codes
 
-- 状态：Accepted
-- 日期：2026-11-24
-- 决策者：powerwm 维护者
-- 相关：[coding-style.md](../coding-style.md)、[ADR-0002](0002-cxx26-toolchain.md)、[ADR-0009](0009-c-api-wrapping.md)
+- Status: Accepted
+- Date: 2026-11-24
+- Owners: powerwm maintainers
+- Related: [coding-style.md](../coding-style.md), [ADR-0002](0002-cxx26-toolchain.md), [ADR-0009](0009-c-api-wrapping.md)
 
-## 背景
+## Context
 
-合成器运行在系统底层，错误来源包括：
+Errors come from clients, GPU/DRM/input failures, config, cancellation, and resource
+exhaustion. Exceptions introduce hidden control flow and complicate C callbacks, coroutines,
+and realtime paths.
 
-- 客户端发送非法协议消息；
-- GPU/DRM/输入设备失败或热插拔；
-- 配置错误、文件缺失、权限不足；
-- 协程取消、连接断开；
-- OOM 或资源耗尽。
+## Decision
 
-异常会引入隐藏控制流、二进制体积、`try/catch` 边界与跨 ABI 问题；在 C 回调、C API、协程和实时路径中尤其难以维护。项目决定采用显式错误码。
+1. The whole project builds with `-fno-exceptions`.
+2. `throw`, `try`, and `catch` are forbidden and policy-scanned.
+3. Recoverable errors return `pwm::result<T>` (`std::expected<T, error>`).
+4. `error` carries a code, static message, source location, and optional errno.
+5. Coroutine tasks store `result<T>` and short-circuit on failure.
+6. Constructors do not perform fallible business initialization; factories return
+   `result<raii<T>>`.
+7. Destructors do not fail; they log and clean up.
+8. Only broken invariants or unrecoverable startup failures terminate.
 
-## 决策
+## Consequences
 
-1. 全项目编译参数包含 **`-fno-exceptions`**。
-2. 禁止 `throw`、`try`、`catch`；CI 策略脚本扫描。
-3. 可恢复错误返回 `pwm::result<T>`：
-   ```cpp
-   template <typename T = void>
-   using result = std::expected<T, error>;
-   ```
-4. `pwm::error` 以 `error_code` 为主，附带静态消息/有界上下文；错误路径避免动态分配。
-5. 协程 `task<T>` 内部持有 `result<T>`；`co_await` 失败时短路并向父任务传播。
-6. 构造函数不做可失败的业务初始化；使用 `create()` 工厂返回 `result<raii<T>>`。
-7. 析构函数不返回错误、不终止流程；只能记录并尽力清理。
-8. 只在不可恢复的不变量破坏或启动失败时 `std::terminate()` / 安全退出。
+### Positive
 
-## 后果
+- Explicit control flow; callers handle errors.
+- Safe across C ABI, callbacks, and coroutines.
+- Smaller exception tables and more predictable hot paths.
+- Error codes are easy to log, count, expose over IPC, and test.
 
-### 正面
+### Negative
 
-- 控制流显式，调用者必须处理错误。
-- 与 C API、协程、回调边界兼容，不需要异常穿越 C 栈。
-- 更小的异常表/二进制开销，热路径更可预测。
-- 错误码便于日志、统计、IPC 与测试断言。
+- More boilerplate; needs helpers/monadic composition.
+- Standard library calls that throw (`std::format` misuse) must be guarded.
+- Third-party libraries need no-exception configuration or isolation.
+- Constructors cannot report recoverable failure; factories are mandatory.
 
-### 负面 / 代价
+## Alternatives
 
-- 样板代码增加；需要统一的错误传播辅助（函数/宏）或 monadic 组合减少重复。
-- 标准库部分接口可能抛异常（如 `std::format` 非法格式），必须前置校验或使用编译期检查。
-- 第三方库（Catch2、TOML 解析器）需要无异常配置或封装。
-- 构造函数不能返回错误，必须使用工厂 + `raii`，对 API 设计要求更高。
-
-### 风险与缓解
-
-| 风险 | 缓解 |
-| --- | --- |
-| 错误被忽略 | `[[nodiscard]]` + 测试 + 代码审查 |
-| 样板过多 | `result` 的 `and_then` / `transform` / 统一工厂 |
-| 第三方不兼容 | 选型验证；`CATCH_CONFIG_DISABLE_EXCEPTIONS`；封装层隔离 |
-| 错误上下文不足 | 错误码 + 静态消息 + 对象 ID/阶段字段 |
-
-## 备选方案
-
-| 方案 | 优点 | 缺点 | 为何未选 |
+| Option | Pros | Cons | Why not |
 | --- | --- | --- | --- |
-| 异常 | 语法简洁、标准库一致 | 隐藏控制流、跨 C/协程边界复杂 | 与项目规则冲突 |
-| 纯 C 错误码 + 输出参数 | 简单、无依赖 | 易忽略、API 丑陋 | 表达力不足 |
-| `std::error_code` | 标准、可扩展 | 类别系统样板多 | 可用但不如自定义 `result` 直接 |
-| `tl::expected` 等第三方 | 兼容旧标准 | 额外依赖 | C++26 已有 `std::expected` |
+| Exceptions | concise, standard | hidden control flow | conflicts with rules |
+| C-style error codes + out params | simple | easy to ignore | poor ergonomics |
+| `std::error_code` | standard | category boilerplate | usable but verbose |
+| `tl::expected` | older standard support | extra dependency | C++26 has expected |
 
-## 重新审视条件
+## Revisit conditions
 
-- `-fno-exceptions` 导致关键依赖不可用，且无法通过封装解决。
-- 错误码模型在实践中造成大量重复且难以维护，证明异常利大于弊。
+- A critical dependency cannot work with `-fno-exceptions` and cannot be isolated.
+- Error-code ergonomics become a proven maintenance burden.

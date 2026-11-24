@@ -1,9 +1,9 @@
-# Phase 1 验收清单
+# Phase 1 validation checklist
 
-> 状态：**实现完成，硬件验收进行中（TTY3 已通过 1200 帧 + 10 次 VT 切换）**  
-> 目标：确认 DRM/KMS 输出、page flip、seat/VT、输入、热插拔与 headless 路径在真实环境可用。
+> Status: implementation complete; hardware validation in progress. TTY3 passed 1200
+> frames and 10 VT switches.
 
-## 1. 构建与静态检查
+## 1. Build and static checks
 
 ```bash
 cmake --preset dev
@@ -13,25 +13,19 @@ bash tools/check_policy.sh
 python3 tools/check_comments.py
 ```
 
-期望：
+Expected: dev/release/asan build; `unit.smoke`, `unit.event_loop`, `unit.headless` pass;
+policy and comment checks pass.
 
-- `dev` / `release` / `asan` 全部构建成功；
-- `unit.smoke`、`unit.event_loop`、`unit.headless` 全部通过；
-- 策略与注释检查通过。
-
-## 2. 只读诊断
+## 2. Read-only diagnostics
 
 ```bash
 ./build/dev/powerwm_probe
 ```
 
-期望：
+Expected: CRTC/connector/framebuffer/encoder counts, connected modes, property IDs. It must
+not take over DRM.
 
-- 打印 CRTC / connector / framebuffer / encoder 数量；
-- connected connector 显示 preferred mode；
-- 不接管 DRM，不影响当前桌面。
-
-本机示例：
+Observed on this machine:
 
 ```text
 crtcs=4 connectors=6 framebuffers=0 encoders=22
@@ -39,97 +33,86 @@ connector id=512 connected=true modes=2
   preferred 2880x1800@120Hz
 ```
 
-## 3. 输入探针
+## 3. Input probe
 
 ```bash
 ./build/dev/powerwm_input_probe
 ```
 
-在 5 秒内按键、移动鼠标、触摸：
+Within five seconds, press keys, move the pointer, and touch. Expected keyboard code/state,
+pointer motion/button/axis, and touch slot/coordinates.
 
-- 键盘输出 key code 与 pressed/released；
-- 指针输出 motion / button / axis；
-- 触摸输出 slot 与坐标。
+## 4. Seat session
 
-## 4. Seat 会话
-
-需要 TTY + `seatd` 或 `logind`。在 TTY3 上使用 logind 时必须传当前会话 ID：
+Requires a TTY plus seatd or logind. On TTY3 with logind, pass the session id:
 
 ```bash
 XDG_SESSION_ID=4 LIBSEAT_BACKEND=logind ./build/dev/powerwm_seat_probe
 ```
 
-期望：
-
-- 打印 `seat enabled=true`；
-- 成功打开 `/dev/dri/card*`；
-- 切换 VT 时打印 enable/disable 变化；
-- 切回原 VT 后恢复。
-
-TTY3 实测：
+TTY3 result:
 
 ```text
 seat enabled=false device=/dev/dri/card1 fd=6
 seat enabled=true
 ```
 
-无 seat provider 时输出 `error: libseat_open_seat failed`，属于预期降级。
+Without a seat provider, `libseat_open_seat failed` is the expected fallback.
 
-## 5. DRM 动画与 page flip
+## 5. DRM animation and page flips
 
-在 TTY3 中运行：
+On TTY3:
 
 ```bash
 XDG_SESSION_ID=4 LIBSEAT_BACKEND=logind ./build/dev/powerwm_drm_bringup 1200
 ```
 
-可选参数是帧数，默认 180（约 3 秒）。
+The optional argument is frame count; default is 180 (~3 seconds).
 
-期望：
+Expected: smooth double-buffered animation, no tearing, VT restored on exit, libseat path
+when available.
 
-- 输出双缓冲渐变动画约 3 秒；
-- 无撕裂；
-- 进程退出后 VT 恢复；
-- seat 可用时通过 libseat 打开设备。
-
-TTY3 实测结果：
+TTY3 result:
 
 ```text
-presented 180 frames
+presented 1200 frames
 ```
 
-VT 切换实测：在动画运行期间来回切换 TTY2/TTY3 **10 次**，seat enable/disable 正常，恢复后继续提交，最终完成 **1200 帧**。
+Ten VT switches between TTY2/TTY3 were exercised while running. Seat enable/disable and
+resume worked, and all 1200 frames completed.
 
-## 6. 硬件验收项
+## 6. Hardware acceptance
 
-| 项目 | 方法 | 通过标准 |
+| Item | Method | Pass condition |
 | --- | --- | --- |
-| 连续出图 | 运行 1 小时动画 | 无黑屏、无撕裂、无崩溃 |
-| VT 切换 | 连续切换 50 次 | 每次恢复输出与输入 |
-| 显示器热插拔 | 拔插 HDMI/DP 10 次 | 自动重启输出运行时，无泄漏 |
-| 空闲 CPU | 停止动画后采样 60s | 单核 < 1% |
-| 资源释放 | 退出后检查 fd / DRM 对象 | 无残留、无泄漏 |
-| 多输出 | 接入 2 个 connected connector | 至少主输出可用，不崩溃 |
-| 输入热插拔 | 插入/拔出键鼠 | libinput 自动发现/移除，不崩溃 |
+| Continuous output | 1-hour animation | no black screen, tearing, or crash |
+| VT switching | 50 switches | output and input recover each time |
+| Display hotplug | 10 HDMI/DP cycles | runtime restarts safely, no leaks |
+| Idle CPU | 60 s sampling after animation | < 1% of one core |
+| Resource release | inspect fds/DRM objects after exit | no leftovers |
+| Multi-output | two connected connectors | primary works, no crash |
+| Input hotplug | plug/unplug keyboard/mouse | libinput discovers/removes devices |
 
-## 7. 当前环境结果
+## 7. Current results
 
-| 项目 | 结果 |
+| Item | Result |
 | --- | --- |
-| 构建 / 单测 | 通过 |
-| `powerwm_probe` | 通过，检测到 2880x1800@120Hz |
-| `powerwm_input_probe` | 通过，5 秒无事件退出 |
-| `powerwm_seat_probe` | TTY3 + logind 通过 |
-| DRM 动画 | TTY3 通过，presented 180 frames |
-| VT 切换 | 10 次来回切换、1200 帧通过 |
-| 热插拔 / 50 次 VT / 1 小时 | 待继续验证（已覆盖 10 次 VT） |
+| Build/unit tests | pass |
+| `powerwm_probe` | pass, 2880x1800@120Hz detected |
+| `powerwm_input_probe` | pass, 5-second run |
+| `powerwm_seat_probe` | pass on TTY3 + logind |
+| DRM animation | pass, 1200 frames |
+| VT switching | pass, 10 cycles |
+| Hotplug / 50 VT / 1 hour | pending |
+| Vulkan DMA-BUF to KMS | pass, TTY3 presentation |
 
-## 8. 已知限制
+## 8. Known limitations
 
-- 输入尚未路由到场景/焦点，只做发现与打印。
-- 输出选择使用首个 connected connector 与首个 plane，尚未做完整的 CRTC/plane 兼容性匹配。
-- 热插拔通过重启输出运行时实现，尚未做到无缝保留客户端状态。
-- Vulkan 渲染器尚未接入，page flip 使用 dumb buffer 测试图案。
-- 多 GPU / 多平面叠加未覆盖。
+- Input is discovered and printed, not routed to scene focus.
+- Output selection uses the first connected connector and first plane; CRTC/plane matching
+  is incomplete.
+- Hotplug restarts the output runtime instead of preserving client state.
+- Vulkan pipeline/scene rendering is early; KMS presentation uses cleared DMA-BUF images.
+- Multi-GPU, overlays, HDR, and VRR are not covered.
 
-这些限制进入 Phase 2/3 后逐步消除。
+These are addressed in Phases 2–6.

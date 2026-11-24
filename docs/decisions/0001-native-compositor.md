@@ -1,74 +1,52 @@
-# ADR-0001: 原生 DRM/KMS 合成器，不基于 wlroots
+# ADR-0001: Native DRM/KMS compositor, no wlroots
 
-- 状态：Accepted（协议库选择被 [ADR-0006](0006-own-wayland-protocol.md) 替代）
-- 日期：2026-11-24
-- 决策者：powerwm 维护者
-- 相关：[architecture.md](../architecture.md)、[roadmap.md](../roadmap.md)
+- Status: Accepted (protocol choice superseded by [ADR-0006](0006-own-wayland-protocol.md); renderer choice by [ADR-0007](0007-vulkan-vulkanpp.md))
+- Date: 2026-11-24
+- Owners: powerwm maintainers
+- Related: [architecture.md](../architecture.md), [roadmap.md](../roadmap.md)
 
-> **更新（2026-11-24）**：本文关于“使用 libwayland-server”的部分已被 ADR-0006 替代；
-> 关于 EGL/GLES + GBM 渲染的部分已被 ADR-0007 替代。
-> 原生 DRM/KMS、不基于 wlroots 的核心决策仍然有效。
+> Update 2026-11-24: libwayland-server and EGL/GLES choices were replaced. The native
+> DRM/KMS and “no wlroots” decisions remain.
 
-## 背景
+## Context
 
-powerwm 的定位是一个现代、高性能、美观的 Linux Wayland 合成器与平铺窗口管理器。实现路径大致有三类：
+A Wayland compositor can be built on wlroots, extended from Mutter/KWin, or constructed
+directly on DRM/KMS, libinput, and a protocol implementation. powerwm wants control over
+the frame lifecycle, rendering, and input path.
 
-1. 基于 wlroots 等现成合成器库，快速获得协议、后端与渲染能力。
-2. 基于 Mutter/KWin 等成熟合成器做扩展或脚本。
-3. 直接从 DRM/KMS、libinput、libwayland-server 构建。
+## Decision
 
-现有原型已经直接操作 DRM/KMS，并验证了原子提交与反射封装。项目目标是长期掌控帧生命周期、渲染与输入路径，而不是在既有框架上做配置层。
+- Use DRM/KMS atomic modesetting directly through libdrm.
+- Use libinput + libudev + libseat for input and sessions.
+- Implement the Wayland protocol in-tree (ADR-0006).
+- Use a custom renderer abstraction with Vulkan (ADR-0007).
+- Do not link wlroots or provide a wlroots plugin ABI.
 
-## 决策
+## Consequences
 
-powerwm **从零构建合成器核心**：
+### Positive
 
-- 显示后端直接使用 DRM/KMS atomic API（libdrm）。
-- 输入直接使用 libinput + libudev + libseat/logind。
-- 协议直接使用 libwayland-server 与 wayland-protocols。
-- 渲染通过自定义 `renderer` 抽象，首选 EGL/GLES3 + GBM。
-- 不链接 wlroots，不提供 wlroots 插件 ABI，不依赖 Mutter/KWin。
+- Full control over frame scheduling, damage, commits, and synchronization.
+- Scene and tiling models can be designed for this compositor.
+- Every layer is testable and observable.
 
-分层与依赖规则见 [architecture.md](../architecture.md)。
+### Negative
 
-## 后果
+- Large protocol, input, session, and recovery workload.
+- Driver and compatibility issues are ours to solve.
+- No reuse of wlroots plugins or tests.
 
-### 正面
+## Alternatives
 
-- 完全掌控帧调度、损坏跟踪、提交与同步，便于达到低延迟目标。
-- 可以针对平铺工作流设计场景图与事务，而不是适配通用合成器模型。
-- 反射、内存布局、分配策略等性能手段不受外部框架约束。
-- 学习与调试路径清晰：每一层都有明确输入/输出，可 headless 测试。
-
-### 负面 / 代价
-
-- 需要自行实现大量协议、输入语义、会话与恢复逻辑，开发周期显著变长。
-- 驱动兼容性、边缘协议行为需要自己踩坑。
-- 无法直接复用 wlroots 的生态插件与测试。
-- 需要建立自己的硬件/应用兼容矩阵。
-
-### 风险与缓解
-
-| 风险 | 缓解 |
-| --- | --- |
-| 协议范围失控 | 按真实客户端需求分阶段实现（见路线图协议表） |
-| 驱动差异 | 能力探测 + 回退；headless 金图；真实硬件冒烟 |
-| 开发周期长 | 每阶段可演示、可回滚；优先日常可用路径 |
-| 安全漏洞 | 输入校验、fuzz、最小权限、审计 |
-
-## 备选方案
-
-| 方案 | 优点 | 缺点 | 为何未选 |
+| Option | Pros | Cons | Why not |
 | --- | --- | --- | --- |
-| wlroots | 成熟、快、协议多 | 抽象约束强，帧/场景控制受限，难以按平铺模型重构 | 与“完全掌控”目标冲突 |
-| Mutter/KWin 扩展 | 生态成熟 | 本质是插件/脚本，无法重写核心 | 不是从零构建 |
-| Smithay (Rust) | 现代、内存安全 | 语言与团队技能不匹配；C++26 是项目前提 | 技术栈不符 |
-| 仅基于 X11 | 实现简单 | X11 生态衰退，无法满足现代合成需求 | 方向错误 |
+| wlroots | mature, fast | abstraction limits frame/scene control | conflicts with ownership goal |
+| Mutter/KWin extension | mature ecosystem | plugin layer, not a core rewrite | not from scratch |
+| Smithay (Rust) | modern, memory-safe | language mismatch | C++26 is required |
+| X11-only | simpler | declining ecosystem | wrong direction |
 
-## 重新审视条件
+## Revisit conditions
 
-- wlroots 提供了无法在合理成本内自研的关键能力（例如完整的输入法/屏幕共享栈），且许可兼容。
-- 自研协议层长期无法达到日常可用，且维护成本超过收益。
-- 项目目标从“自研合成器”转为“快速交付桌面”。
-
-即使触发，也应新增 ADR，而不是直接推翻本文。
+- A required capability becomes impractical to build in-tree.
+- Protocol maintenance cost exceeds the benefit of ownership.
+- Project goal changes from “own the stack” to “ship quickly.”
