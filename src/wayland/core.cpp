@@ -368,20 +368,28 @@ auto subcompositor_object::request_get_subsurface(object_id subsurface, object_i
 }
 
 auto data_offer_object::request_accept(u32 serial, std::string_view mime) -> result<void> {
-    static_cast<void>(serial);
-    static_cast<void>(mime);
-    return {};
+    if (mime.empty()) {
+        return {};
+    }
+    if (std::find(mime_types.begin(), mime_types.end(), mime) == mime_types.end()) {
+        return std::unexpected(
+            make_error(error_code::protocol, "data offer does not provide the mime type"));
+    }
+    return core->service().accept_data_offer(id, source_client, source_object, serial, mime);
 }
 
 auto data_offer_object::request_receive(std::string_view mime, handle_t fd) -> result<void> {
-    static_cast<void>(mime);
+    if (std::find(mime_types.begin(), mime_types.end(), mime) == mime_types.end()) {
+        return std::unexpected(
+            make_error(error_code::protocol, "data offer does not provide the mime type"));
+    }
     auto owned = platform::wayland::file_descriptor::adopt(fd);
-    static_cast<void>(owned);
-    return {};
+    return core->service().receive_data_offer(id, source_client, source_object, mime, owned.fd());
 }
 
 auto data_offer_object::request_destroy() -> result<void> {
-    return core->service().destroy_object(id);
+    core->service().connection_ref().objects().remove(id);
+    return {};
 }
 
 auto data_offer_object::request_finish() -> result<void> {
@@ -400,7 +408,9 @@ auto data_source_object::request_offer(std::string_view mime) -> result<void> {
 }
 
 auto data_source_object::request_destroy() -> result<void> {
-    return core->service().destroy_object(id);
+    core->service().notify_data_source_destroyed(id);
+    core->service().connection_ref().objects().remove(id);
+    return {};
 }
 
 auto data_source_object::request_set_actions(u32 value) -> result<void> {
@@ -418,9 +428,8 @@ auto data_device_object::request_start_drag(object_id source, object_id origin, 
 }
 
 auto data_device_object::request_set_selection(object_id source, u32 serial) -> result<void> {
-    static_cast<void>(serial);
     selection = source;
-    return {};
+    return core->service().notify_data_source(source, serial);
 }
 
 auto data_device_object::request_release() -> result<void> {
@@ -792,6 +801,130 @@ auto core_protocol::pointers() const noexcept -> std::span<const object_id> {
 
 auto core_protocol::touches() const noexcept -> std::span<const object_id> {
     return touch_ids_;
+}
+
+auto core_protocol::create_data_offer(u32 source_client, object_id source_object,
+                                      std::span<const std::string> mime_types, u32 actions)
+    -> result<object_id> {
+    const object_id offer = next_server_id_++;
+    auto* object =
+        store(data_offers_, data_offer_object{this, offer, source_client, source_object});
+    object->mime_types.assign(mime_types.begin(), mime_types.end());
+    if (auto added = add_object<data_offer_object, generated::wl_data_offer>(
+            service_->connection_ref().objects(), offer, *object);
+        !added) {
+        return std::unexpected(added.error());
+    }
+    for (const std::string& mime : object->mime_types) {
+        generated::wl_data_offer::event_offer event{};
+        std::get<0>(event.arguments) = mime;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_data_offer::event_offer::encode(writer, offer, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    if (actions != 0) {
+        generated::wl_data_offer::event_source_actions event{};
+        std::get<0>(event.arguments) = actions;
+        protocol_writer writer;
+        if (auto encoded =
+                generated::wl_data_offer::event_source_actions::encode(writer, offer, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return offer;
+}
+
+auto core_protocol::data_source_mime_types(object_id source) const -> std::span<const std::string> {
+    for (const auto& object : data_sources_) {
+        if (object->id == source) {
+            return object->mime_types;
+        }
+    }
+    return {};
+}
+
+auto core_protocol::data_source_actions(object_id source) const noexcept -> u32 {
+    for (const auto& object : data_sources_) {
+        if (object->id == source) {
+            return object->actions;
+        }
+    }
+    return 0;
+}
+
+auto core_protocol::send_selection(object_id offer) -> result<void> {
+    for (const auto& device : data_devices_) {
+        generated::wl_data_device::event_selection event{};
+        std::get<0>(event.arguments) = offer;
+        protocol_writer writer;
+        if (auto encoded =
+                generated::wl_data_device::event_selection::encode(writer, device->id, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto core_protocol::send_data_source_send(object_id source, std::string_view mime, handle_t fd)
+    -> result<void> {
+    bool found = false;
+    for (const auto& object : data_sources_) {
+        if (object->id != source) {
+            continue;
+        }
+        found = true;
+        generated::wl_data_source::event_send event{};
+        std::get<0>(event.arguments) = mime;
+        std::get<1>(event.arguments) = fd;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_data_source::event_send::encode(writer, source, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+        break;
+    }
+    if (!found) {
+        return std::unexpected(make_error(error_code::protocol, "data source no longer exists"));
+    }
+    return service_->connection_ref().flush();
+}
+
+auto core_protocol::send_data_source_target(object_id source, std::string_view mime)
+    -> result<void> {
+    generated::wl_data_source::event_target event{};
+    std::get<0>(event.arguments) = mime;
+    protocol_writer writer;
+    if (auto encoded = generated::wl_data_source::event_target::encode(writer, source, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return service_->queue_event(writer);
+}
+
+auto core_protocol::send_data_source_cancelled(object_id source) -> result<void> {
+    generated::wl_data_source::event_cancelled event{};
+    protocol_writer writer;
+    if (auto encoded = generated::wl_data_source::event_cancelled::encode(writer, source, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return service_->queue_event(writer);
 }
 
 auto core_protocol::send_keyboard_keymap(object_id id) -> result<void> {

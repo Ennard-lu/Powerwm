@@ -77,6 +77,9 @@ pre-1.0 `0.x.y` convention.
   decoration configure events.
 - `wp_presentation`/`wp_presentation_feedback` with feedback deferred to the next KMS
   page flip; GTK4 validation passes with the global advertised.
+- Cross-client clipboard: `wl_data_source` mime offers, `wl_data_device.set_selection`,
+  compositor-brokered `wl_data_offer` creation, accept targets, and `receive` file
+  descriptor forwarding between clients.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

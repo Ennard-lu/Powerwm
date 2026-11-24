@@ -382,6 +382,99 @@ auto display_service::send_presentation_feedback(object_id feedback, u32 seconds
     return queue_event(writer);
 }
 
+auto display_service::set_data_source_callback(data_source_callback callback,
+                                               void* context) noexcept -> void {
+    data_source_callback_ = callback;
+    data_source_context_ = context;
+}
+
+auto display_service::set_data_source_destroyed_callback(data_source_destroyed_callback callback,
+                                                         void* context) noexcept -> void {
+    data_source_destroyed_callback_ = callback;
+    data_source_destroyed_context_ = context;
+}
+
+auto display_service::set_data_offer_receive_callback(data_offer_receive_callback callback,
+                                                      void* context) noexcept -> void {
+    data_offer_receive_callback_ = callback;
+    data_offer_receive_context_ = context;
+}
+
+auto display_service::set_data_offer_accept_callback(data_offer_accept_callback callback,
+                                                     void* context) noexcept -> void {
+    data_offer_accept_callback_ = callback;
+    data_offer_accept_context_ = context;
+}
+
+auto display_service::notify_data_source(object_id source, u32 serial) -> result<void> {
+    if (data_source_callback_ == nullptr) {
+        return {};
+    }
+    data_source_callback_(data_source_context_,
+                          {.source = source,
+                           .serial = serial,
+                           .actions = core_.data_source_actions(source),
+                           .mime_types = core_.data_source_mime_types(source)});
+    return {};
+}
+
+auto display_service::notify_data_source_destroyed(object_id source) -> void {
+    if (data_source_destroyed_callback_ != nullptr) {
+        data_source_destroyed_callback_(data_source_destroyed_context_, source);
+    }
+}
+
+auto display_service::create_data_offer(u32 source_client, object_id source_object,
+                                        std::span<const std::string> mime_types, u32 actions)
+    -> result<object_id> {
+    return core_.create_data_offer(source_client, source_object, mime_types, actions);
+}
+
+auto display_service::send_selection(object_id offer) -> result<void> {
+    return core_.send_selection(offer);
+}
+
+auto display_service::receive_data_offer(object_id offer, u32 source_client,
+                                         object_id source_object, std::string_view mime_type,
+                                         handle_t fd) -> result<void> {
+    if (data_offer_receive_callback_ == nullptr) {
+        return {};
+    }
+    data_offer_receive_callback_(data_offer_receive_context_, {.offer = offer,
+                                                               .source_client = source_client,
+                                                               .source_object = source_object,
+                                                               .mime_type = mime_type,
+                                                               .fd = fd});
+    return {};
+}
+
+auto display_service::accept_data_offer(object_id offer, u32 source_client, object_id source_object,
+                                        u32 serial, std::string_view mime_type) -> result<void> {
+    if (data_offer_accept_callback_ == nullptr) {
+        return {};
+    }
+    data_offer_accept_callback_(data_offer_accept_context_, {.offer = offer,
+                                                             .source_client = source_client,
+                                                             .source_object = source_object,
+                                                             .serial = serial,
+                                                             .mime_type = mime_type});
+    return {};
+}
+
+auto display_service::send_data_source_send(object_id source, std::string_view mime, handle_t fd)
+    -> result<void> {
+    return core_.send_data_source_send(source, mime, fd);
+}
+
+auto display_service::send_data_source_target(object_id source, std::string_view mime)
+    -> result<void> {
+    return core_.send_data_source_target(source, mime);
+}
+
+auto display_service::send_data_source_cancelled(object_id source) -> result<void> {
+    return core_.send_data_source_cancelled(source);
+}
+
 auto display_service::send_callback_done(object_id callback, u32 data) -> result<void> {
     generated::wl_callback::event_done done{};
     std::get<0>(done.arguments) = data;

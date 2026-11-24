@@ -177,7 +177,8 @@ libwayland.
 - [x] `wp_presentation`/`wp_presentation_feedback` with feedback deferred to the next
   KMS page flip; tested with GTK4;
 - [x] GTK4 Wayland client connects and commits a shm window;
-- [ ] complete clipboard/DnD data transfer;
+- [x] cross-client clipboard selection, offers, mime negotiation, and fd transfer;
+- [ ] drag-and-drop enter, motion, drop, and finish flow;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [x] in-tree socket handshake and raw-wire client verification;

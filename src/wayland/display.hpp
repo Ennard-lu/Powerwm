@@ -9,6 +9,7 @@
 #include <wayland/xdg_shell.hpp>
 
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -30,6 +31,38 @@ struct presentation_feedback_event {
 
 using presentation_feedback_callback = auto (*)(void* context,
                                                 const presentation_feedback_event& event) -> void;
+
+struct data_source_event {
+    object_id source = 0;
+    u32 serial = 0;
+    u32 actions = 0;
+    std::span<const std::string> mime_types;
+};
+
+using data_source_callback = auto (*)(void* context, const data_source_event& event) -> void;
+using data_source_destroyed_callback = auto (*)(void* context, object_id source) -> void;
+
+struct data_offer_receive_event {
+    object_id offer = 0;
+    u32 source_client = 0;
+    object_id source_object = 0;
+    std::string_view mime_type;
+    handle_t fd = -1;
+};
+
+using data_offer_receive_callback = auto (*)(void* context, const data_offer_receive_event& event)
+    -> void;
+
+struct data_offer_accept_event {
+    object_id offer = 0;
+    u32 source_client = 0;
+    object_id source_object = 0;
+    u32 serial = 0;
+    std::string_view mime_type;
+};
+
+using data_offer_accept_callback = auto (*)(void* context, const data_offer_accept_event& event)
+    -> void;
 
 struct display_object {
     display_service* service = nullptr;
@@ -119,6 +152,43 @@ class display_service {
     [[nodiscard]] auto send_presentation_feedback(object_id feedback, u32 seconds_low,
                                                   u32 nanoseconds, u32 refresh_ns) -> result<void>;
 
+    auto set_data_source_callback(data_source_callback callback, void* context) noexcept -> void;
+
+    auto set_data_source_destroyed_callback(data_source_destroyed_callback callback,
+                                            void* context) noexcept -> void;
+
+    auto set_data_offer_receive_callback(data_offer_receive_callback callback,
+                                         void* context) noexcept -> void;
+
+    auto set_data_offer_accept_callback(data_offer_accept_callback callback, void* context) noexcept
+        -> void;
+
+    [[nodiscard]] auto notify_data_source(object_id source, u32 serial) -> result<void>;
+
+    [[nodiscard]] auto notify_data_source_destroyed(object_id source) -> void;
+
+    [[nodiscard]] auto create_data_offer(u32 source_client, object_id source_object,
+                                         std::span<const std::string> mime_types, u32 actions)
+        -> result<object_id>;
+
+    [[nodiscard]] auto send_selection(object_id offer) -> result<void>;
+
+    [[nodiscard]] auto receive_data_offer(object_id offer, u32 source_client,
+                                          object_id source_object, std::string_view mime_type,
+                                          handle_t fd) -> result<void>;
+
+    [[nodiscard]] auto accept_data_offer(object_id offer, u32 source_client,
+                                         object_id source_object, u32 serial,
+                                         std::string_view mime_type) -> result<void>;
+
+    [[nodiscard]] auto send_data_source_send(object_id source, std::string_view mime, handle_t fd)
+        -> result<void>;
+
+    [[nodiscard]] auto send_data_source_target(object_id source, std::string_view mime)
+        -> result<void>;
+
+    [[nodiscard]] auto send_data_source_cancelled(object_id source) -> result<void>;
+
   private:
     friend struct display_object;
     friend struct registry_object;
@@ -129,6 +199,14 @@ class display_service {
     xdg_shell_protocol xdg_;
     presentation_feedback_callback presentation_callback_ = nullptr;
     void* presentation_context_ = nullptr;
+    data_source_callback data_source_callback_ = nullptr;
+    void* data_source_context_ = nullptr;
+    data_source_destroyed_callback data_source_destroyed_callback_ = nullptr;
+    void* data_source_destroyed_context_ = nullptr;
+    data_offer_receive_callback data_offer_receive_callback_ = nullptr;
+    void* data_offer_receive_context_ = nullptr;
+    data_offer_accept_callback data_offer_accept_callback_ = nullptr;
+    void* data_offer_accept_context_ = nullptr;
     std::vector<std::unique_ptr<registry_object>> registries_;
     std::vector<registry_global> globals_;
     u32 next_global_name_ = 1;

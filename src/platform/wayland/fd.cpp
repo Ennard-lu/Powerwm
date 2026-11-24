@@ -2,7 +2,10 @@
 
 #include <platform/wayland/fd.hpp>
 
+#include <fcntl.h>
 #include <unistd.h>
+
+#include <cerrno>
 
 namespace pwm::platform::wayland {
 
@@ -35,11 +38,49 @@ auto file_descriptor::fd() const noexcept -> handle_t {
     return fd_;
 }
 
+auto file_descriptor::read(std::span<std::byte> buffer) const noexcept -> result<usize> {
+    while (true) {
+        const auto count = ::read(fd_, buffer.data(), buffer.size());
+        if (count >= 0) {
+            return static_cast<usize>(count);
+        }
+        if (errno != EINTR) {
+            return std::unexpected(
+                make_error(error_code::io, "read failed", std::source_location::current(), errno));
+        }
+    }
+}
+
+auto file_descriptor::write(std::span<const std::byte> buffer) const noexcept -> result<usize> {
+    while (true) {
+        const auto count = ::write(fd_, buffer.data(), buffer.size());
+        if (count >= 0) {
+            return static_cast<usize>(count);
+        }
+        if (errno != EINTR) {
+            return std::unexpected(
+                make_error(error_code::io, "write failed", std::source_location::current(), errno));
+        }
+    }
+}
+
 auto file_descriptor::destroy() const noexcept -> void {
     if (fd_ >= 0) {
         ::close(fd_);
         fd_ = -1;
     }
+}
+
+auto create_pipe() noexcept -> result<file_descriptor_pair> {
+    int fds[2]{-1, -1};
+    if (::pipe2(fds, O_CLOEXEC) != 0) {
+        return std::unexpected(
+            make_error(error_code::io, "pipe2 failed", std::source_location::current(), errno));
+    }
+    return file_descriptor_pair{
+        .read = file_descriptor::adopt(fds[0]),
+        .write = file_descriptor::adopt(fds[1]),
+    };
 }
 
 }

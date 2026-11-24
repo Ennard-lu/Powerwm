@@ -34,6 +34,7 @@ namespace {
 
 namespace wayland = pwm::wayland;
 namespace generated = pwm::wayland::generated;
+namespace transport = pwm::platform::wayland;
 
 using pwm::i32;
 using pwm::u16;
@@ -1474,6 +1475,306 @@ auto test_presentation() -> bool {
     return clock_events == 1 && presented_events == 1;
 }
 
+struct clipboard_harness {
+    wayland::display_service* source_display = nullptr;
+    wayland::display_service* destination_display = nullptr;
+    u32 offer = 0;
+    bool selected = false;
+    bool forwarded = false;
+    bool accepted = false;
+};
+
+auto on_clipboard_selection(void* context, const wayland::data_source_event& event) -> void {
+    auto& harness = *static_cast<clipboard_harness*>(context);
+    harness.selected = true;
+    auto offer = harness.destination_display->create_data_offer(1, event.source, event.mime_types,
+                                                                event.actions);
+    if (!offer) {
+        return;
+    }
+    harness.offer = *offer;
+    static_cast<void>(harness.destination_display->send_selection(*offer));
+}
+
+auto on_clipboard_receive(void* context, const wayland::data_offer_receive_event& event) -> void {
+    auto& harness = *static_cast<clipboard_harness*>(context);
+    harness.forwarded = static_cast<bool>(harness.source_display->send_data_source_send(
+        event.source_object, event.mime_type, event.fd));
+}
+
+auto on_clipboard_accept(void* context, const wayland::data_offer_accept_event& event) -> void {
+    auto& harness = *static_cast<clipboard_harness*>(context);
+    harness.accepted = true;
+    static_cast<void>(
+        harness.source_display->send_data_source_target(event.source_object, event.mime_type));
+}
+
+auto drain_client(transport::stream& client, std::vector<std::byte>& input,
+                  std::vector<pwm::handle_t>& fds) -> bool {
+    std::array<std::byte, 4096> buffer{};
+    std::array<pwm::handle_t, 8> fd_buffer{};
+    for (i32 attempt = 0; attempt < 100; ++attempt) {
+        auto result = client.receive(buffer, fd_buffer);
+        if (!result) {
+            return false;
+        }
+        input.insert(input.end(), buffer.begin(), buffer.begin() + result->bytes);
+        fds.insert(fds.end(), fd_buffer.begin(), fd_buffer.begin() + result->fds);
+        if (result->would_block || result->closed || (result->bytes == 0 && result->fds == 0)) {
+            break;
+        }
+    }
+    return true;
+}
+
+auto test_clipboard_transfer() -> bool {
+    namespace transport = pwm::platform::wayland;
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-clipboard.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto source_client_result = transport::connect_stream(path);
+    auto destination_client_result = transport::connect_stream(path);
+    if (!source_client_result || !destination_client_result) {
+        return false;
+    }
+    auto source_client = std::move(*source_client_result);
+    auto destination_client = std::move(*destination_client_result);
+    auto source_server_result = listener.accept();
+    auto destination_server_result = listener.accept();
+    if (!source_server_result || !destination_server_result) {
+        return false;
+    }
+
+    wayland::connection source_server{std::move(*source_server_result)};
+    wayland::connection destination_server{std::move(*destination_server_result)};
+    wayland::display_service source_display{source_server};
+    wayland::display_service destination_display{destination_server};
+    if (!source_display.start() || !destination_display.start()) {
+        return false;
+    }
+    const u32 source_seat = source_display.add_global("wl_seat", 2);
+    const u32 source_manager = source_display.add_global("wl_data_device_manager", 3);
+    const u32 destination_seat = destination_display.add_global("wl_seat", 2);
+    const u32 destination_manager = destination_display.add_global("wl_data_device_manager", 3);
+
+    clipboard_harness harness{
+        .source_display = &source_display,
+        .destination_display = &destination_display,
+    };
+    source_display.set_data_source_callback(on_clipboard_selection, &harness);
+    destination_display.set_data_offer_receive_callback(on_clipboard_receive, &harness);
+    destination_display.set_data_offer_accept_callback(on_clipboard_accept, &harness);
+
+    const auto begin_registry = [](wayland::protocol_writer& writer) {
+        static_cast<void>(writer.begin_message(1, 1));
+        static_cast<void>(writer.write_new_id(2));
+        static_cast<void>(writer.end_message());
+    };
+    const auto bind_global = [](wayland::protocol_writer& writer, u32 global,
+                                std::string_view interface, u32 version, u32 id) {
+        static_cast<void>(writer.begin_message(2, 0));
+        static_cast<void>(writer.write_u32(global));
+        static_cast<void>(writer.write_string(interface));
+        static_cast<void>(writer.write_u32(version));
+        static_cast<void>(writer.write_new_id(id));
+        static_cast<void>(writer.end_message());
+    };
+
+    wayland::protocol_writer destination_setup;
+    begin_registry(destination_setup);
+    bind_global(destination_setup, destination_seat, "wl_seat", 2, 3);
+    bind_global(destination_setup, destination_manager, "wl_data_device_manager", 3, 4);
+    static_cast<void>(destination_setup.begin_message(4, 1));
+    static_cast<void>(destination_setup.write_new_id(6));
+    static_cast<void>(destination_setup.write_object(3));
+    static_cast<void>(destination_setup.end_message());
+    auto destination_sent =
+        destination_client.send(destination_setup.bytes(), destination_setup.fds());
+    if (!destination_sent || destination_sent->bytes != destination_setup.bytes().size()) {
+        return false;
+    }
+    if (!destination_server.receive_available() || !destination_server.dispatch_available() ||
+        !destination_server.flush()) {
+        return false;
+    }
+    std::vector<std::byte> setup_input;
+    std::vector<pwm::handle_t> setup_fds;
+    if (!drain_client(destination_client, setup_input, setup_fds)) {
+        return false;
+    }
+
+    wayland::protocol_writer source_setup;
+    begin_registry(source_setup);
+    bind_global(source_setup, source_seat, "wl_seat", 2, 3);
+    bind_global(source_setup, source_manager, "wl_data_device_manager", 3, 4);
+    static_cast<void>(source_setup.begin_message(4, 0));
+    static_cast<void>(source_setup.write_new_id(5));
+    static_cast<void>(source_setup.end_message());
+    static_cast<void>(source_setup.begin_message(4, 1));
+    static_cast<void>(source_setup.write_new_id(7));
+    static_cast<void>(source_setup.write_object(3));
+    static_cast<void>(source_setup.end_message());
+    static_cast<void>(source_setup.begin_message(5, 0));
+    static_cast<void>(source_setup.write_string("text/plain;charset=utf-8"));
+    static_cast<void>(source_setup.end_message());
+    static_cast<void>(source_setup.begin_message(5, 0));
+    static_cast<void>(source_setup.write_string("text/plain"));
+    static_cast<void>(source_setup.end_message());
+    static_cast<void>(source_setup.begin_message(7, 1));
+    static_cast<void>(source_setup.write_object(5));
+    static_cast<void>(source_setup.write_u32(1));
+    static_cast<void>(source_setup.end_message());
+
+    auto source_sent = source_client.send(source_setup.bytes(), source_setup.fds());
+    if (!source_sent || source_sent->bytes != source_setup.bytes().size()) {
+        return false;
+    }
+    if (!source_server.receive_available() || !source_server.dispatch_available() ||
+        !source_server.flush()) {
+        return false;
+    }
+    std::vector<std::byte> source_setup_input;
+    std::vector<pwm::handle_t> source_setup_fds;
+    if (!drain_client(source_client, source_setup_input, source_setup_fds)) {
+        return false;
+    }
+    if (!harness.selected || harness.offer == 0 || !destination_server.flush()) {
+        return false;
+    }
+
+    std::vector<std::byte> destination_input;
+    std::vector<pwm::handle_t> destination_fds;
+    if (!drain_client(destination_client, destination_input, destination_fds)) {
+        return false;
+    }
+
+    pwm::u32 offered_mime_types = 0;
+    u32 selected_offer = 0;
+    pwm::usize offset = 0;
+    while (offset + sizeof(wayland::message_header) <= destination_input.size()) {
+        auto header =
+            wayland::decode_header(std::span<const std::byte>{destination_input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{destination_input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == harness.offer && header->opcode == 0) {
+            if (!generated::wl_data_offer::event_offer::decode(reader)) {
+                return false;
+            }
+            ++offered_mime_types;
+        } else if (header->object == 6 && header->opcode == 5) {
+            auto message = generated::wl_data_device::event_selection::decode(reader);
+            if (!message) {
+                return false;
+            }
+            selected_offer = std::get<0>(message->arguments);
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    if (offered_mime_types != 2 || selected_offer != harness.offer) {
+        return false;
+    }
+
+    auto pipe_result = transport::create_pipe();
+    if (!pipe_result) {
+        return false;
+    }
+    auto pipe = std::move(*pipe_result);
+    wayland::protocol_writer transfer;
+    static_cast<void>(transfer.begin_message(harness.offer, 0));
+    static_cast<void>(transfer.write_u32(2));
+    static_cast<void>(transfer.write_string("text/plain"));
+    static_cast<void>(transfer.end_message());
+    static_cast<void>(transfer.begin_message(harness.offer, 1));
+    static_cast<void>(transfer.write_string("text/plain"));
+    static_cast<void>(transfer.write_fd(pipe.write.fd()));
+    static_cast<void>(transfer.end_message());
+    auto transfer_sent = destination_client.send(transfer.bytes(), transfer.fds());
+    pipe.write.destroy();
+    if (!transfer_sent || transfer_sent->bytes != transfer.bytes().size()) {
+        return false;
+    }
+    if (!destination_server.receive_available() || !destination_server.dispatch_available() ||
+        !destination_server.flush()) {
+        return false;
+    }
+    if (!harness.forwarded) {
+        return false;
+    }
+
+    std::vector<std::byte> source_input;
+    std::vector<pwm::handle_t> source_fds;
+    if (!drain_client(source_client, source_input, source_fds) || source_fds.size() != 1) {
+        return false;
+    }
+
+    bool saw_target = false;
+    pwm::handle_t transfer_fd = -1;
+    offset = 0;
+    while (offset + sizeof(wayland::message_header) <= source_input.size()) {
+        auto header =
+            wayland::decode_header(std::span<const std::byte>{source_input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{source_input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, source_fds};
+        if (header->object == 5 && header->opcode == 0) {
+            if (!generated::wl_data_source::event_target::decode(reader)) {
+                return false;
+            }
+            saw_target = true;
+        } else if (header->object == 5 && header->opcode == 1) {
+            auto message = generated::wl_data_source::event_send::decode(reader);
+            if (!message) {
+                return false;
+            }
+            transfer_fd = std::get<1>(message->arguments);
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    if (!harness.accepted || !saw_target || transfer_fd < 0) {
+        return false;
+    }
+
+    constexpr std::string_view payload_text = "powerwm-clipboard";
+    auto transfer_owner = transport::file_descriptor::adopt(transfer_fd);
+    const auto written = transfer_owner.write(std::span<const std::byte>{
+        reinterpret_cast<const std::byte*>(payload_text.data()), payload_text.size()});
+    transfer_owner.destroy();
+    if (!written || *written != payload_text.size()) {
+        return false;
+    }
+
+    std::string received_text;
+    std::array<std::byte, 64> pipe_buffer{};
+    while (true) {
+        auto count = pipe.read.read(pipe_buffer);
+        if (!count) {
+            return false;
+        }
+        if (*count == 0) {
+            break;
+        }
+        received_text.append(reinterpret_cast<const char*>(pipe_buffer.data()), *count);
+    }
+    return received_text == payload_text;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -1524,6 +1825,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_clipboard_transfer()) {
+        std::println(stderr, "clipboard transfer test failed");
         return EXIT_FAILURE;
     }
     if (!test_presentation()) {

@@ -10,6 +10,7 @@
 #include <wayland/wire.hpp>
 
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -168,6 +169,9 @@ struct subcompositor_object {
 struct data_offer_object {
     core_protocol* core = nullptr;
     object_id id = 0;
+    u32 source_client = 0;
+    object_id source_object = 0;
+    std::vector<std::string> mime_types;
 
     [[nodiscard]] auto request_accept(u32 serial, std::string_view mime) -> result<void>;
     [[nodiscard]] auto request_receive(std::string_view mime, handle_t fd) -> result<void>;
@@ -362,6 +366,19 @@ class core_protocol {
 
     [[nodiscard]] auto send_keyboard_keymap(object_id id) -> result<void>;
 
+    [[nodiscard]] auto create_data_offer(u32 source_client, object_id source_object,
+                                         std::span<const std::string> mime_types, u32 actions)
+        -> result<object_id>;
+    [[nodiscard]] auto data_source_mime_types(object_id source) const
+        -> std::span<const std::string>;
+    [[nodiscard]] auto data_source_actions(object_id source) const noexcept -> u32;
+    [[nodiscard]] auto send_selection(object_id offer) -> result<void>;
+    [[nodiscard]] auto send_data_source_send(object_id source, std::string_view mime, handle_t fd)
+        -> result<void>;
+    [[nodiscard]] auto send_data_source_target(object_id source, std::string_view mime)
+        -> result<void>;
+    [[nodiscard]] auto send_data_source_cancelled(object_id source) -> result<void>;
+
     auto set_surface_commit_callback(surface_commit_callback callback, void* context) noexcept
         -> void;
 
@@ -379,6 +396,8 @@ class core_protocol {
     friend struct fractional_scale_manager_object;
     friend struct decoration_manager_object;
     friend struct data_device_manager_object;
+    friend struct data_offer_object;
+    friend struct data_source_object;
 
     [[nodiscard]] auto send_shm_formats(object_id id) -> result<void>;
     [[nodiscard]] auto send_output_events(object_id id, u32 version) -> result<void>;
@@ -430,6 +449,7 @@ class core_protocol {
     u32 output_refresh_hz_ = 60;
     surface_commit_callback commit_callback_ = nullptr;
     void* commit_context_ = nullptr;
+    object_id next_server_id_ = 0xff000000;
 };
 
 }

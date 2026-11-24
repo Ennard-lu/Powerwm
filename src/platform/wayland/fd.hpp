@@ -2,7 +2,10 @@
 
 #pragma once
 
+#include <base/result.hpp>
 #include <base/types.hpp>
+
+#include <span>
 
 namespace pwm::platform::wayland {
 
@@ -23,6 +26,10 @@ class file_descriptor {
 
     [[nodiscard]] auto fd() const noexcept -> handle_t;
 
+    [[nodiscard]] auto read(std::span<std::byte> buffer) const noexcept -> result<usize>;
+
+    [[nodiscard]] auto write(std::span<const std::byte> buffer) const noexcept -> result<usize>;
+
     auto destroy() const noexcept -> void;
 
   private:
@@ -31,5 +38,12 @@ class file_descriptor {
 
     mutable handle_t fd_ = -1;
 };
+
+struct file_descriptor_pair {
+    file_descriptor read;
+    file_descriptor write;
+};
+
+[[nodiscard]] auto create_pipe() noexcept -> result<file_descriptor_pair>;
 
 }
