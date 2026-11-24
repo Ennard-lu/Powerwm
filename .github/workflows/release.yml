@@ -30,6 +30,8 @@ jobs:
             ninja-build \
             pkg-config \
             libdrm-dev \
+            libinput-dev \
+            libudev-dev \
             libvulkan-dev \
             vulkan-validationlayers \
             mesa-vulkan-drivers

@@ -128,7 +128,7 @@ powerwm/
 │   │   ├── gbm/                 # 早期 GBM 封装（Vulkan 落地后评估移除）
 │   │   ├── event/               # poll 等待；epoll/timerfd/signalfd 封装
 │   │   ├── socket/              # 目标：socket/recvmsg/sendmsg/SCM_RIGHTS
-│   │   ├── input/               # 目标：libinput
+│   │   ├── input/               # libinput + libudev 事件上下文
 │   │   ├── seat/                # 目标：libseat/logind
 │   │   ├── udev/                # 目标：libudev
 │   │   └── headless/            # 目标：测试后端

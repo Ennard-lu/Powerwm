@@ -15,6 +15,9 @@ include(cmake/PowerWMBuildInfo.cmake)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
 find_package(Libdrm REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(Libinput REQUIRED IMPORTED_TARGET libinput)
+pkg_check_modules(Libudev REQUIRED IMPORTED_TARGET libudev)
 
 add_library(powerwm_core STATIC
     src/base/fatal.cpp
@@ -30,12 +33,24 @@ target_include_directories(powerwm_core PUBLIC
 )
 target_link_libraries(powerwm_core PUBLIC Libdrm::Libdrm)
 
+add_library(powerwm_input STATIC
+    src/platform/input/context.cpp
+)
+target_link_libraries(powerwm_input PUBLIC
+    powerwm_core
+    PkgConfig::Libinput
+    PkgConfig::Libudev
+)
+
 add_executable(powerwm src/app/main.cpp)
 target_link_libraries(powerwm PRIVATE powerwm_core)
 
 if(POWERWM_BUILD_BRINGUP_TOOL)
     add_executable(powerwm_drm_bringup tools/drm_bringup.cpp)
     target_link_libraries(powerwm_drm_bringup PRIVATE powerwm_core)
+
+    add_executable(powerwm_input_probe tools/input_probe.cpp)
+    target_link_libraries(powerwm_input_probe PRIVATE powerwm_input)
 endif()
 
 if(BUILD_TESTING)
