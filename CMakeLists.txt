@@ -18,6 +18,7 @@ find_package(Libdrm REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(Libinput REQUIRED IMPORTED_TARGET libinput)
 pkg_check_modules(Libudev REQUIRED IMPORTED_TARGET libudev)
+pkg_check_modules(Libseat REQUIRED IMPORTED_TARGET libseat)
 
 add_library(powerwm_core STATIC
     src/base/fatal.cpp
@@ -42,6 +43,14 @@ target_link_libraries(powerwm_input PUBLIC
     PkgConfig::Libudev
 )
 
+add_library(powerwm_seat STATIC
+    src/platform/seat/seat.cpp
+)
+target_link_libraries(powerwm_seat PUBLIC
+    powerwm_core
+    PkgConfig::Libseat
+)
+
 add_executable(powerwm src/app/main.cpp)
 target_link_libraries(powerwm PRIVATE powerwm_core)
 
@@ -51,6 +60,9 @@ if(POWERWM_BUILD_BRINGUP_TOOL)
 
     add_executable(powerwm_input_probe tools/input_probe.cpp)
     target_link_libraries(powerwm_input_probe PRIVATE powerwm_input)
+
+    add_executable(powerwm_seat_probe tools/seat_probe.cpp)
+    target_link_libraries(powerwm_seat_probe PRIVATE powerwm_seat)
 endif()
 
 if(BUILD_TESTING)

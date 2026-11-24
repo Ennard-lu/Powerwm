@@ -118,7 +118,7 @@ cmake --build --preset dev
 | `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1` | UB 立即失败并打印栈 |
 | `CC` / `CXX` | 指定编译器（默认 GCC 16） |
 
-CI 默认使用官方 `gcc:16` 容器；当前安装 `libdrm-dev`、`libinput-dev`、`libudev-dev`、`libvulkan-dev`、`vulkan-validationlayers`、`mesa-vulkan-drivers`，后续按模块增加 `libseat-dev` 等。**不安装、不链接 `libwayland-*`。**
+CI 默认使用官方 `gcc:16` 容器；当前安装 `libdrm-dev`、`libinput-dev`、`libseat-dev`、`libudev-dev`、`libvulkan-dev`、`vulkan-validationlayers`、`mesa-vulkan-drivers`。**不安装、不链接 `libwayland-*`。**
 
 ---
 

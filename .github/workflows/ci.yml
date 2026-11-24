@@ -78,6 +78,7 @@ jobs:
             pkg-config \
             libdrm-dev \
             libinput-dev \
+            libseat-dev \
             libudev-dev \
             libvulkan-dev \
             vulkan-validationlayers \

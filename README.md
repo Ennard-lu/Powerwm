@@ -48,10 +48,12 @@ The repository currently contains the Phase 0 foundation and a DRM/KMS bring-up 
   `framebuffer`, property lookup, display modes.
 - `src/platform/event/` — poll-based event waiting used by the DRM page-flip and input loops.
 - `src/platform/input/` — libinput + libudev context with normalized keyboard, pointer, and touch events.
+- `src/platform/seat/` — libseat session wrapper for device access and VT enable/disable events.
 - `src/platform/gbm/` — early libgbm wrapper; will be evaluated after the Vulkan backend lands.
 - `src/app/main.cpp` — application skeleton; prints version/help and never touches DRM.
 - `tools/drm_bringup.cpp` — DRM/KMS modesetting demo with double-buffered page-flip animation.
 - `tools/input_probe.cpp` — five-second libinput event probe for keyboard, pointer, and touch input.
+- `tools/seat_probe.cpp` — five-second libseat session probe.
 - `tests/unit/` — CTest smoke tests for `result` and `raii`.
 
 The Wayland protocol engine, Vulkan renderer, scene graph, and window manager are not
@@ -180,6 +182,7 @@ DRM device, so run it from a TTY with the required permissions:
 ```bash
 sudo ./build/dev/powerwm_drm_bringup
 sudo ./build/dev/powerwm_input_probe
+./build/dev/powerwm_seat_probe
 ```
 
 ## Build metadata

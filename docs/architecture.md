@@ -129,7 +129,7 @@ powerwm/
 │   │   ├── event/               # poll 等待；epoll/timerfd/signalfd 封装
 │   │   ├── socket/              # 目标：socket/recvmsg/sendmsg/SCM_RIGHTS
 │   │   ├── input/               # libinput + libudev 事件上下文
-│   │   ├── seat/                # 目标：libseat/logind
+│   │   ├── seat/                # libseat 会话与设备打开
 │   │   ├── udev/                # 目标：libudev
 │   │   └── headless/            # 目标：测试后端
 │   ├── render/
