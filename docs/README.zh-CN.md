@@ -24,7 +24,8 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 | --- | --- |
 | **不依赖 libwayland-\*** | 自行实现 Wayland wire protocol、对象模型与消息编解码，使用 C++ 协程组织协议处理 |
 | **禁用异常** | 全项目 `-fno-exceptions`；错误通过 `pwm::result<T>` / 错误码返回，禁止 `throw` / `try` / `catch` |
-| **C API 必须封装** | 任何 C 资源都必须有 `create` / `destroy` 包装，并通过 `pwm::raii`（或专用 RAII 类型）进入业务代码 |
+| **C API 必须封装** | 任何 C 资源都必须有 `create` / `destroy` 包装，并通过 `pwm::raii`（或专用 RAII 类型）进入业务代码；依赖资源由宿主创建 |
+| **函数声明** | 具名函数统一使用 `auto foo() -> T` 尾置返回类型 |
 | **Vulkan 后端** | 渲染通过内部 `vulkanpp` 封装层使用 Vulkan，不暴露裸 `Vk*` 句柄 |
 | **命名空间 `pwm`** | 根命名空间简称 `pwm`，基础类型/RAII 位于 `pwm`，模块位于 `pwm::platform::drm`、`pwm::render::vulkan` |
 | **定宽整数别名** | 使用 `pwm::i32` / `pwm::u32` / `pwm::usize` 等，不在业务代码写 `int32_t` / `uint32_t` |

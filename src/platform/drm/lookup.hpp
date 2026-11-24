@@ -22,7 +22,7 @@ auto lookup_property_ids(const device& device, property_set properties,
     -> property_id_map;
 
 template <typename T>
-inline T lookup_property_ids(const device& device, property_set properties) {
+inline auto lookup_property_ids(const device& device, property_set properties) -> T {
     T result{};
     for (const u32 property_id : properties.property_ids()) {
         auto property = raii{device.get_property_info(property_id)};

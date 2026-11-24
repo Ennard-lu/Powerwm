@@ -7,7 +7,7 @@
 
 namespace pwm {
 
-void terminate_with_message(std::string_view message) noexcept {
+auto terminate_with_message(std::string_view message) noexcept -> void {
     std::println(stderr, "fatal: {}", message);
     std::abort();
 }

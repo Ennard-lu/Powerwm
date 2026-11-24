@@ -14,19 +14,19 @@ namespace pwm::platform::gbm {
 struct buffer {
     gbm_bo* val;
 
-    PWM_ALWAYS_INLINE bool valid() const noexcept {
+    [[nodiscard]] PWM_ALWAYS_INLINE auto valid() const noexcept -> bool {
         return val != nullptr;
     }
 
-    PWM_ALWAYS_INLINE static buffer from(gbm_bo* obj) noexcept {
-        return {obj};
+    [[nodiscard]] PWM_ALWAYS_INLINE static auto wrap(gbm_bo* object) noexcept -> buffer {
+        return {object};
     }
 
-    PWM_ALWAYS_INLINE void destroy() const noexcept {
+    auto destroy() const noexcept -> void {
         gbm_bo_destroy(val);
     }
 
-    PWM_ALWAYS_INLINE pwm::handle_t fd() const noexcept {
+    [[nodiscard]] PWM_ALWAYS_INLINE auto fd() const noexcept -> pwm::handle_t {
         return gbm_bo_get_fd(val);
     }
 };
@@ -34,26 +34,28 @@ struct buffer {
 struct context {
     gbm_device* val;
 
-    PWM_ALWAYS_INLINE bool valid() const noexcept {
+    [[nodiscard]] PWM_ALWAYS_INLINE auto valid() const noexcept -> bool {
         return val != nullptr;
     }
 
-    PWM_ALWAYS_INLINE static context from(pwm::handle_t handle) noexcept {
+    [[nodiscard]] PWM_ALWAYS_INLINE static auto create(pwm::handle_t handle) noexcept -> context {
         return {gbm_create_device(handle)};
     }
 
-    PWM_ALWAYS_INLINE buffer allocate(pwm::u32 width, pwm::u32 height, pwm::u32 format,
-                                      pwm::u32 flags) {
-        return buffer::from(gbm_bo_create(val, width, height, format, flags));
+    [[nodiscard]] PWM_ALWAYS_INLINE auto allocate(pwm::u32 width, pwm::u32 height, pwm::u32 format,
+                                                  pwm::u32 flags) -> buffer {
+        return buffer::wrap(gbm_bo_create(val, width, height, format, flags));
     }
-    PWM_ALWAYS_INLINE pwm::handle_t fd() const noexcept {
+
+    [[nodiscard]] PWM_ALWAYS_INLINE auto fd() const noexcept -> pwm::handle_t {
         return gbm_device_get_fd(val);
     }
-    PWM_ALWAYS_INLINE std::string_view backend_name() const noexcept {
+
+    [[nodiscard]] PWM_ALWAYS_INLINE auto backend_name() const noexcept -> std::string_view {
         return gbm_device_get_backend_name(val);
     }
 
-    PWM_ALWAYS_INLINE void destroy() const noexcept {
+    auto destroy() const noexcept -> void {
         gbm_device_destroy(val);
     }
 };

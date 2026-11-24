@@ -171,7 +171,23 @@ cmake --build --preset dev --target format
 - 单位写入名字：`timeout_ms`、`width_px`、`scale_factor`。
 - 禁止在协议结构体中使用 `int`/`long` 等平台相关宽度。
 
-### 5.2 接口形态
+### 5.2 函数声明风格
+
+所有具名函数统一使用尾置返回类型：
+
+```cpp
+auto create_device(const char* path) -> result<device>;
+auto destroy() const noexcept -> void;
+auto is_valid() const noexcept -> bool;
+```
+
+- 禁止在函数定义/声明中使用前置返回类型，例如 `bool is_valid()`。
+- `void` 也写成 `-> void`。
+- `static` 成员写成 `static auto create(...) -> result<T>`。
+- 例外：`main`、构造函数、析构函数、转换运算符。
+- 该风格由 clang-format 与代码审查保证。
+
+### 5.3 接口形态
 
 ```cpp
 namespace pwm::platform::drm {
@@ -312,9 +328,9 @@ struct file_descriptor {
     [[nodiscard]] static auto create(const char* path, pwm::i32 flags)
         -> result<raii<file_descriptor>>;
 
-    [[nodiscard]] bool valid() const noexcept { return fd >= 0; }
+    [[nodiscard]] auto valid() const noexcept -> bool { return fd >= 0; }
 
-    void destroy() const noexcept { ::close(fd); }
+    auto destroy() const noexcept -> void { ::close(fd); }
 };
 
 }
@@ -331,6 +347,7 @@ struct file_descriptor {
 7. **错误码**：`create` 失败返回 `result<raii<T>>`；不要用无效句柄 + 断言代替可恢复错误。
 8. **Vulkan**：`vkCreate*`/`vkDestroy*`、`vkAllocate*`/`vkFree*`、队列、命令池、同步对象全部由 `vulkanpp` 封装；业务层不出现 `Vk*`。
 9. **测试**：每个封装至少覆盖创建失败、重复销毁、移动后销毁、正常销毁。
+10. **依赖资源由宿主创建**：`dumb_buffer`、`framebuffer`、`property_blob` 等依赖 device 的资源，使用 `device::create_*`，不要在依赖类型上提供 `dependent::create(device, ...)`。依赖类型的构造函数私有，`destroy()` 使用创建时保存的宿主句柄。
 
 > 代码审查中看到裸 C 调用，默认拒绝；除非它就在上述封装层内，并有对应 RAII 类型与测试。
 

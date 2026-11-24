@@ -26,37 +26,7 @@ inline constexpr u32 atomic_allow_modeset = DRM_MODE_ATOMIC_ALLOW_MODESET;
 
 namespace fs = std::filesystem;
 
-struct device_resources {
-    drmModeRes* handle = nullptr;
-
-    [[nodiscard]] bool valid() const noexcept {
-        return handle != nullptr;
-    }
-
-    [[nodiscard]] std::span<u32> crtc_ids() const noexcept {
-        return {handle->crtcs, static_cast<usize>(handle->count_crtcs)};
-    }
-
-    [[nodiscard]] std::span<u32> connector_ids() const noexcept {
-        return {handle->connectors, static_cast<usize>(handle->count_connectors)};
-    }
-
-    [[nodiscard]] std::span<u32> framebuffer_ids() const noexcept {
-        return {handle->fbs, static_cast<usize>(handle->count_fbs)};
-    }
-
-    [[nodiscard]] std::span<u32> encoder_ids() const noexcept {
-        return {handle->encoders, static_cast<usize>(handle->count_encoders)};
-    }
-
-    [[nodiscard]] static device_resources wrap(drmModeRes* resources) noexcept {
-        return {resources};
-    }
-
-    void destroy() const noexcept {
-        drmModeFreeResources(handle);
-    }
-};
+class device;
 
 class display_mode {
   public:
@@ -65,19 +35,19 @@ class display_mode {
     explicit display_mode(const drmModeModeInfo& mode) noexcept : mode_(mode) {
     }
 
-    [[nodiscard]] u32 width_px() const noexcept {
+    [[nodiscard]] auto width_px() const noexcept -> u32 {
         return mode_.hdisplay;
     }
 
-    [[nodiscard]] u32 height_px() const noexcept {
+    [[nodiscard]] auto height_px() const noexcept -> u32 {
         return mode_.vdisplay;
     }
 
-    [[nodiscard]] u32 refresh_hz() const noexcept {
+    [[nodiscard]] auto refresh_hz() const noexcept -> u32 {
         return mode_.vrefresh;
     }
 
-    [[nodiscard]] std::span<const std::byte> bytes() const noexcept {
+    [[nodiscard]] auto bytes() const noexcept -> std::span<const std::byte> {
         return {reinterpret_cast<const std::byte*>(&mode_), sizeof(mode_)};
     }
 
@@ -85,34 +55,66 @@ class display_mode {
     drmModeModeInfo mode_{};
 };
 
-struct connector {
-    drmModeConnector* handle = nullptr;
+struct device_resources {
+    drmModeRes* handle = nullptr;
 
-    [[nodiscard]] bool valid() const noexcept {
+    [[nodiscard]] auto valid() const noexcept -> bool {
         return handle != nullptr;
     }
 
-    [[nodiscard]] u32 mode_count() const noexcept {
-        return static_cast<u32>(handle->count_modes);
+    [[nodiscard]] auto crtc_ids() const noexcept -> std::span<u32> {
+        return {handle->crtcs, static_cast<usize>(handle->count_crtcs)};
     }
 
-    [[nodiscard]] display_mode mode(u32 index) const noexcept {
-        return display_mode{handle->modes[index]};
+    [[nodiscard]] auto connector_ids() const noexcept -> std::span<u32> {
+        return {handle->connectors, static_cast<usize>(handle->count_connectors)};
     }
 
-    [[nodiscard]] std::span<u32> property_ids() const noexcept {
-        return {handle->props, static_cast<usize>(handle->count_props)};
+    [[nodiscard]] auto framebuffer_ids() const noexcept -> std::span<u32> {
+        return {handle->fbs, static_cast<usize>(handle->count_fbs)};
     }
 
-    [[nodiscard]] std::span<u32> encoder_ids() const noexcept {
+    [[nodiscard]] auto encoder_ids() const noexcept -> std::span<u32> {
         return {handle->encoders, static_cast<usize>(handle->count_encoders)};
     }
 
-    [[nodiscard]] static connector wrap(drmModeConnector* connector) noexcept {
-        return {connector};
+    [[nodiscard]] static auto wrap(drmModeRes* resources) noexcept -> device_resources {
+        return {resources};
     }
 
-    void destroy() const noexcept {
+    auto destroy() const noexcept -> void {
+        drmModeFreeResources(handle);
+    }
+};
+
+struct connector {
+    drmModeConnector* handle = nullptr;
+
+    [[nodiscard]] auto valid() const noexcept -> bool {
+        return handle != nullptr;
+    }
+
+    [[nodiscard]] auto mode_count() const noexcept -> u32 {
+        return static_cast<u32>(handle->count_modes);
+    }
+
+    [[nodiscard]] auto mode(u32 index) const noexcept -> display_mode {
+        return display_mode{handle->modes[index]};
+    }
+
+    [[nodiscard]] auto property_ids() const noexcept -> std::span<u32> {
+        return {handle->props, static_cast<usize>(handle->count_props)};
+    }
+
+    [[nodiscard]] auto encoder_ids() const noexcept -> std::span<u32> {
+        return {handle->encoders, static_cast<usize>(handle->count_encoders)};
+    }
+
+    [[nodiscard]] static auto wrap(drmModeConnector* value) noexcept -> connector {
+        return {value};
+    }
+
+    auto destroy() const noexcept -> void {
         drmModeFreeConnector(handle);
     }
 };
@@ -120,15 +122,15 @@ struct connector {
 struct crtc {
     drmModeCrtc* handle = nullptr;
 
-    [[nodiscard]] bool valid() const noexcept {
+    [[nodiscard]] auto valid() const noexcept -> bool {
         return handle != nullptr;
     }
 
-    [[nodiscard]] static crtc wrap(drmModeCrtc* crtc) noexcept {
-        return {crtc};
+    [[nodiscard]] static auto wrap(drmModeCrtc* value) noexcept -> crtc {
+        return {value};
     }
 
-    void destroy() const noexcept {
+    auto destroy() const noexcept -> void {
         drmModeFreeCrtc(handle);
     }
 };
@@ -136,23 +138,23 @@ struct crtc {
 struct property_set {
     drmModeObjectProperties* handle = nullptr;
 
-    [[nodiscard]] bool valid() const noexcept {
+    [[nodiscard]] auto valid() const noexcept -> bool {
         return handle != nullptr;
     }
 
-    [[nodiscard]] std::span<u32> property_ids() const noexcept {
+    [[nodiscard]] auto property_ids() const noexcept -> std::span<u32> {
         return {handle->props, static_cast<usize>(handle->count_props)};
     }
 
-    [[nodiscard]] std::span<u64> property_values() const noexcept {
+    [[nodiscard]] auto property_values() const noexcept -> std::span<u64> {
         return {handle->prop_values, static_cast<usize>(handle->count_props)};
     }
 
-    [[nodiscard]] static property_set wrap(drmModeObjectProperties* properties) noexcept {
+    [[nodiscard]] static auto wrap(drmModeObjectProperties* properties) noexcept -> property_set {
         return {properties};
     }
 
-    void destroy() const noexcept {
+    auto destroy() const noexcept -> void {
         drmModeFreeObjectProperties(handle);
     }
 };
@@ -160,7 +162,7 @@ struct property_set {
 struct atomic_request {
     drmModeAtomicReq* handle = nullptr;
 
-    [[nodiscard]] bool valid() const noexcept {
+    [[nodiscard]] auto valid() const noexcept -> bool {
         return handle != nullptr;
     }
 
@@ -173,19 +175,20 @@ struct atomic_request {
         return atomic_request{request};
     }
 
-    [[nodiscard]] bool add_property(u32 object_id, u32 property_id, u64 value) const noexcept {
+    [[nodiscard]] auto add_property(u32 object_id, u32 property_id, u64 value) const noexcept
+        -> bool {
         return drmModeAtomicAddProperty(handle, object_id, property_id, value) == 0;
     }
 
-    [[nodiscard]] bool merge(const atomic_request& other) const noexcept {
+    [[nodiscard]] auto merge(const atomic_request& other) const noexcept -> bool {
         return drmModeAtomicMerge(handle, other.handle) == 0;
     }
 
-    [[nodiscard]] atomic_request duplicate() const noexcept {
+    [[nodiscard]] auto duplicate() const noexcept -> atomic_request {
         return {drmModeAtomicDuplicate(handle)};
     }
 
-    void destroy() const noexcept {
+    auto destroy() const noexcept -> void {
         drmModeAtomicFree(handle);
     }
 };
@@ -193,19 +196,19 @@ struct atomic_request {
 struct property_info {
     drmModePropertyRes* handle = nullptr;
 
-    [[nodiscard]] bool valid() const noexcept {
+    [[nodiscard]] auto valid() const noexcept -> bool {
         return handle != nullptr;
     }
 
-    [[nodiscard]] std::string_view name() const noexcept {
+    [[nodiscard]] auto name() const noexcept -> std::string_view {
         return handle->name;
     }
 
-    [[nodiscard]] static property_info wrap(drmModePropertyRes* property) noexcept {
+    [[nodiscard]] static auto wrap(drmModePropertyRes* property) noexcept -> property_info {
         return {property};
     }
 
-    void destroy() const noexcept {
+    auto destroy() const noexcept -> void {
         drmModeFreeProperty(handle);
     }
 };
@@ -213,40 +216,129 @@ struct property_info {
 struct plane_set {
     drmModePlaneRes* handle = nullptr;
 
-    [[nodiscard]] bool valid() const noexcept {
+    [[nodiscard]] auto valid() const noexcept -> bool {
         return handle != nullptr;
     }
 
-    [[nodiscard]] std::span<const u32> plane_ids() const noexcept {
+    [[nodiscard]] auto plane_ids() const noexcept -> std::span<const u32> {
         return {handle->planes, static_cast<usize>(handle->count_planes)};
     }
 
-    [[nodiscard]] static plane_set wrap(drmModePlaneRes* planes) noexcept {
+    [[nodiscard]] static auto wrap(drmModePlaneRes* planes) noexcept -> plane_set {
         return {planes};
     }
 
-    void destroy() const noexcept {
+    auto destroy() const noexcept -> void {
         drmModeFreePlaneResources(handle);
     }
 };
 
-struct property_blob;
-struct framebuffer;
+struct mapped_memory {
+    void* address = MAP_FAILED;
+    usize size_bytes = 0;
 
-struct device {
-    handle_t fd_handle = -1;
+    [[nodiscard]] auto valid() const noexcept -> bool {
+        return address != MAP_FAILED;
+    }
 
+    auto destroy() const noexcept -> void {
+        ::munmap(address, size_bytes);
+    }
+};
+
+class dumb_buffer {
+  public:
+    dumb_buffer() noexcept = default;
+
+    [[nodiscard]] auto valid() const noexcept -> bool {
+        return handle_ != 0;
+    }
+
+    [[nodiscard]] auto handle() const noexcept -> u32 {
+        return handle_;
+    }
+
+    [[nodiscard]] auto format() const noexcept -> const buffer_format& {
+        return format_;
+    }
+
+    [[nodiscard]] auto map() const noexcept -> result<mapped_memory>;
+
+    auto destroy() const noexcept -> void;
+
+  private:
+    friend class device;
+
+    dumb_buffer(handle_t device_fd, u32 handle, buffer_format format) noexcept
+        : device_fd_(device_fd), handle_(handle), format_(format) {
+    }
+
+    handle_t device_fd_ = -1;
+    u32 handle_ = 0;
+    buffer_format format_{};
+};
+
+class property_blob {
+  public:
+    property_blob() noexcept = default;
+
+    [[nodiscard]] auto valid() const noexcept -> bool {
+        return id_ != 0;
+    }
+
+    [[nodiscard]] auto id() const noexcept -> u32 {
+        return id_;
+    }
+
+    auto destroy() const noexcept -> void;
+
+  private:
+    friend class device;
+
+    property_blob(handle_t device_fd, u32 id) noexcept : device_fd_(device_fd), id_(id) {
+    }
+
+    handle_t device_fd_ = -1;
+    u32 id_ = 0;
+};
+
+class framebuffer {
+  public:
+    framebuffer() noexcept = default;
+
+    [[nodiscard]] auto valid() const noexcept -> bool {
+        return id_ != 0;
+    }
+
+    [[nodiscard]] auto id() const noexcept -> u32 {
+        return id_;
+    }
+
+    auto destroy() const noexcept -> void;
+
+  private:
+    friend class device;
+
+    framebuffer(handle_t device_fd, u32 id) noexcept : device_fd_(device_fd), id_(id) {
+    }
+
+    handle_t device_fd_ = -1;
+    u32 id_ = 0;
+};
+
+class device {
+  public:
     device() noexcept = default;
 
-    explicit device(handle_t fd) noexcept : fd_handle(fd) {
+    explicit device(handle_t fd) noexcept : fd_handle_(fd) {
     }
 
-    [[nodiscard]] bool valid() const noexcept {
-        return fd_handle >= 0;
+    [[nodiscard]] auto valid() const noexcept -> bool {
+        return fd_handle_ >= 0;
     }
 
-    [[nodiscard]] handle_t fd() const noexcept {
-        return fd_handle;
+    [[nodiscard]] auto fd() const noexcept -> handle_t {
+        return fd_handle_;
     }
 
     [[nodiscard]] static auto create(const fs::path& path) noexcept -> result<device>;
@@ -259,86 +351,41 @@ struct device {
 
     [[nodiscard]] auto set_atomic_enabled(bool enabled) const noexcept -> result<void>;
 
-    [[nodiscard]] device_resources get_resources() const noexcept;
+    [[nodiscard]] auto get_resources() const noexcept -> device_resources;
 
-    [[nodiscard]] plane_set get_plane_resources() const noexcept;
+    [[nodiscard]] auto get_plane_resources() const noexcept -> plane_set;
 
-    [[nodiscard]] property_info get_property_info(u32 property_id) const noexcept;
+    [[nodiscard]] auto get_property_info(u32 property_id) const noexcept -> property_info;
 
-    [[nodiscard]] property_set get_connector_properties(u32 connector_id) const noexcept;
+    [[nodiscard]] auto get_connector_properties(u32 connector_id) const noexcept -> property_set;
 
-    [[nodiscard]] property_set get_crtc_properties(u32 crtc_id) const noexcept;
+    [[nodiscard]] auto get_crtc_properties(u32 crtc_id) const noexcept -> property_set;
 
-    [[nodiscard]] property_set get_plane_properties(u32 plane_id) const noexcept;
+    [[nodiscard]] auto get_plane_properties(u32 plane_id) const noexcept -> property_set;
 
     [[nodiscard]] auto commit_atomic(const atomic_request& request, u32 flags) const noexcept
         -> result<void>;
 
-    [[nodiscard]] crtc get_crtc(u32 crtc_id) const noexcept;
+    [[nodiscard]] auto get_crtc(u32 crtc_id) const noexcept -> crtc;
 
-    [[nodiscard]] connector get_connector(u32 connector_id) const noexcept;
+    [[nodiscard]] auto get_connector(u32 connector_id) const noexcept -> connector;
 
+    /// Creates a dumb buffer owned by this device. The device must outlive the buffer.
+    [[nodiscard]] auto create_dumb_buffer(const buffer_format& format) const noexcept
+        -> result<dumb_buffer>;
+
+    /// Creates a framebuffer owned by this device. The device must outlive the framebuffer.
+    [[nodiscard]] auto create_framebuffer(const dumb_buffer& buffer) const noexcept
+        -> result<framebuffer>;
+
+    /// Creates a property blob owned by this device. The device must outlive the blob.
     [[nodiscard]] auto create_property_blob(std::span<const std::byte> data) const noexcept
         -> result<property_blob>;
 
-    void destroy() const noexcept;
-};
+    auto destroy() const noexcept -> void;
 
-struct mapped_memory {
-    void* address = MAP_FAILED;
-    usize size_bytes = 0;
-
-    [[nodiscard]] bool valid() const noexcept {
-        return address != MAP_FAILED;
-    }
-
-    void destroy() const noexcept {
-        ::munmap(address, size_bytes);
-    }
-};
-
-struct dumb_buffer {
-    u32 handle = 0;
-    buffer_format format{};
-
-    [[nodiscard]] bool valid() const noexcept {
-        return handle != 0;
-    }
-
-    [[nodiscard]] static auto create(const device& device, const buffer_format& format) noexcept
-        -> result<dumb_buffer>;
-
-    void destroy(handle_t device_fd) const noexcept;
-
-    [[nodiscard]] auto map(handle_t device_fd, usize size_bytes) const noexcept
-        -> result<mapped_memory>;
-};
-
-struct property_blob {
-    u32 id = 0;
-
-    [[nodiscard]] bool valid() const noexcept {
-        return id != 0;
-    }
-
-    [[nodiscard]] static property_blob wrap(u32 id) noexcept {
-        return {id};
-    }
-
-    void destroy(handle_t device_fd) const noexcept;
-};
-
-struct framebuffer {
-    u32 id = 0;
-
-    [[nodiscard]] bool valid() const noexcept {
-        return id != 0;
-    }
-
-    [[nodiscard]] static auto create(const device& device, const dumb_buffer& buffer) noexcept
-        -> result<framebuffer>;
-
-    void destroy(handle_t device_fd) const noexcept;
+  private:
+    handle_t fd_handle_ = -1;
 };
 
 }

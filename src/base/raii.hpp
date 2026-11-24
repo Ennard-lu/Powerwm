@@ -37,14 +37,14 @@ class raii {
     }
 
     raii(const raii&) = delete;
-    raii& operator=(const raii&) = delete;
+    auto operator=(const raii&) -> raii& = delete;
 
     raii(raii&& other) noexcept
         : owns_(other.owns_), value_(other.value_), arguments_(std::move(other.arguments_)) {
         other.owns_ = false;
     }
 
-    raii& operator=(raii&& other) noexcept {
+    auto operator=(raii&& other) noexcept -> raii& {
         if (this == &other) {
             return *this;
         }
@@ -60,33 +60,33 @@ class raii {
         destroy_owned();
     }
 
-    [[nodiscard]] value_t release() noexcept {
+    [[nodiscard]] auto release() noexcept -> value_t {
         owns_ = false;
         return value_;
     }
 
-    [[nodiscard]] bool is_owned() const noexcept {
+    [[nodiscard]] auto is_owned() const noexcept -> bool {
         return owns_;
     }
 
-    [[nodiscard]] const value_t& value() const noexcept {
+    [[nodiscard]] auto value() const noexcept -> const value_t& {
         return value_;
     }
 
-    [[nodiscard]] value_t& value() noexcept {
+    [[nodiscard]] auto value() noexcept -> value_t& {
         return value_;
     }
 
-    [[nodiscard]] const value_t* operator->() const noexcept {
+    [[nodiscard]] auto operator->() const noexcept -> const value_t* {
         return &value_;
     }
 
-    [[nodiscard]] value_t* operator->() noexcept {
+    [[nodiscard]] auto operator->() noexcept -> value_t* {
         return &value_;
     }
 
   private:
-    void destroy_owned() noexcept {
+    auto destroy_owned() noexcept -> void {
         if (!owns_ || !value_.valid()) {
             owns_ = false;
             return;
@@ -95,7 +95,7 @@ class raii {
         owns_ = false;
     }
 
-    void destroy() noexcept {
+    auto destroy() noexcept -> void {
         [&, this]<usize... N>(std::index_sequence<N...>) {
             value_.destroy(std::get<N>(arguments_)...);
         }(std::make_index_sequence<sizeof...(Args)>());

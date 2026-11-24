@@ -71,6 +71,7 @@ P0 地基 ──► P1 点亮 ──► P2 画布 ──► P3 语言 ──► 
 - [x] C API 封装检查脚本与 CI 门禁（`tools/check_policy.sh` + `Policy` job）。
 - [x] 注释策略检查（`tools/check_comments.py`）：禁止解释性注释，只允许英文 API 注释。
 - [x] 构建元数据模块：git commit / 分支 / dirty / UTC 构建时间 / 编译器 / 参数 / 特性。
+- [x] 依赖资源由宿主创建（`device.create_dumb_buffer` 等）；统一尾置返回类型。
 - [ ] 分支保护与必需检查配置。
 
 ### 退出标准

@@ -6,6 +6,6 @@
 
 namespace pwm {
 
-[[noreturn]] void terminate_with_message(std::string_view message) noexcept;
+[[noreturn]] auto terminate_with_message(std::string_view message) noexcept -> void;
 
 }

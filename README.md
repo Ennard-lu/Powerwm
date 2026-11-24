@@ -1,7 +1,7 @@
 # powerwm
 
-> A modern, high-performance Wayland compositor and tiling window manager for Linux
-> built from scratch in C++26 on top of DRM/KMS.
+> A modern C++26 Wayland compositor and tiling window manager for Linux, built from
+> scratch on DRM/KMS with Vulkan and a coroutine-based protocol stack.
 
 [![CI](https://github.com/Ennard-lu/Powerwm/actions/workflows/ci.yml/badge.svg)](https://github.com/Ennard-lu/Powerwm/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -30,12 +30,13 @@ These rules are enforced by CI, compile flags, and code review:
 | --- | --- |
 | **No libwayland-*** | The Wayland wire protocol, object model, marshalling, fd passing, and coroutine protocol engine are implemented in-tree |
 | **No exceptions** | The whole project is compiled with `-fno-exceptions`; errors use `pwm::result<T>` and error codes |
-| **Wrap every C API** | Resources are created with `create`, released with `destroy`, and enter business code through `pwm::raii` |
+| **Wrap every C API** | Resources are created with `create`, released with `destroy`, and enter business code through `pwm::raii`; dependent resources are created by their owner (`device.create_dumb_buffer()`) |
 | **Vulkan only** | Rendering uses Vulkan through the internal `vulkanpp` RAII layer; no EGL/GLES path |
 | **Namespace `pwm`** | Root namespace is `pwm`; modules use `pwm::platform::drm`, `pwm::render::vulkan`, etc. |
 | **Fixed-width integers** | Business code uses `pwm::i32`, `pwm::u32`, `pwm::usize`, not `int32_t`/`uint32_t` |
 | **No explanatory comments** | Code comments are English API documentation (`///`, `/**`) or SPDX only; implementation files contain no comments |
 | **Small functions** | Business functions target 60 lines (hard limit 80) and at most 5 nesting levels; names must be self-explanatory |
+| **Uniform declarations** | Named functions use trailing return types: `auto create() -> result<T>`; only `main`, constructors, and destructors are exempt |
 | **Apache-2.0** | Every source file carries an SPDX identifier |
 
 ## Current state
@@ -248,5 +249,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
-
-**powerwm** — slow is smooth, smooth is fast. Build the foundation first.

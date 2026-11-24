@@ -314,6 +314,7 @@ sequenceDiagram
 - 任何 C 资源都必须有 `create` / `destroy` 包装，并通过 `pwm::raii` 或专用 RAII 类型进入业务层。
 - 裸句柄只允许存在于封装实现内部；业务层不直接包含 C 头文件或调用 C API。
 - `destroy` 必须幂等、`noexcept`；`create` 失败返回 `result<raii<T>>`。
+- 依赖其他对象的资源由宿主创建，例如 `device.create_dumb_buffer()`、`device.create_framebuffer()`；不要在依赖类型上提供 `dependent::create(owner, ...)`。
 - 允许直接调用 C API 的目录：`base/`、`platform/`、`render/vulkanpp/`。
 - 详细的命名、测试与检查规则见 [coding-style.md](coding-style.md) 与 [ADR-0009](decisions/0009-c-api-wrapping.md)。
 

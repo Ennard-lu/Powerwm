@@ -17,9 +17,10 @@
 - `tools/check_comments.py`：禁止解释性注释，只允许英文 API 文档注释与 SPDX。
 - `cmake/PowerWMBuildInfo.cmake`：生成 git commit、分支、构建时间、编译器与参数元数据。
 - `powerwm --build-info`：打印构建元数据。
+- 依赖 DRM device 的资源改由 `device::create_*` 创建；统一使用 `auto foo() -> T` 函数声明风格。
 - 英文 README；中文 README 移至 `docs/README.zh-CN.md`。
 - Apache-2.0 `LICENSE` 与 SPDX 文件头。
-- ADR-0006 ~ ADR-0011：自研协议栈、Vulkan/vulkanpp、无异常、C API 封装、许可证、命名空间。
+- ADR-0006 ~ ADR-0012：自研协议栈、Vulkan/vulkanpp、无异常、C API 封装、许可证、命名空间、依赖资源创建。
 
 ### Changed
 

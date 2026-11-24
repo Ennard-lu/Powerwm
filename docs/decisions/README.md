@@ -21,6 +21,7 @@ ADR 记录**重要的、难以回退的**技术选择。它不是教程，而是
 | [0009](0009-c-api-wrapping.md) | C API 必须 create/destroy + RAII 封装 | Accepted | 2026-11-24 |
 | [0010](0010-apache-2-0.md) | 采用 Apache License 2.0 | Accepted | 2026-11-24 |
 | [0011](0011-namespace-and-integers.md) | 命名空间 pwm 与定宽整数别名 | Accepted | 2026-11-24 |
+| [0012](0012-dependent-resource-creation.md) | 依赖资源由宿主创建 | Accepted | 2026-11-24 |
 
 ## 状态定义
 

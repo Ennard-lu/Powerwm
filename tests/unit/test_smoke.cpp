@@ -11,11 +11,11 @@ namespace {
 struct test_resource {
     bool* destroyed = nullptr;
 
-    [[nodiscard]] bool valid() const noexcept {
+    [[nodiscard]] auto valid() const noexcept -> bool {
         return destroyed != nullptr;
     }
 
-    void destroy() const noexcept {
+    auto destroy() const noexcept -> void {
         *destroyed = true;
     }
 };
