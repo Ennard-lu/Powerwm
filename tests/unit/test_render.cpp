@@ -23,9 +23,13 @@
 
 namespace {
 
+#if !defined(__SANITIZE_ADDRESS__)
 std::atomic<pwm::usize> live_allocations{0};
+#endif
 
 }
+
+#if !defined(__SANITIZE_ADDRESS__)
 
 auto operator new(pwm::usize size) -> void* {
     void* memory = std::malloc(size);
@@ -58,6 +62,8 @@ auto operator delete(void* memory, pwm::usize) noexcept -> void {
 auto operator delete[](void* memory, pwm::usize) noexcept -> void {
     ::operator delete(memory);
 }
+
+#endif
 
 namespace {
 
@@ -323,6 +329,10 @@ auto run_golden_test() -> int {
 }
 
 auto run_allocation_test() -> int {
+#if defined(__SANITIZE_ADDRESS__)
+    std::println("steady-state allocation test skipped under AddressSanitizer");
+    return EXIT_SUCCESS;
+#else
     fixture context;
     auto fixture_result = create_fixture(context);
     if (!fixture_result) {
@@ -374,6 +384,7 @@ auto run_allocation_test() -> int {
     }
     std::println("steady-state render allocation test passed");
     return EXIT_SUCCESS;
+#endif
 }
 
 auto run_budget_test() -> int {
