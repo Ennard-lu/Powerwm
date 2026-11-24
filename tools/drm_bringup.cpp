@@ -38,7 +38,7 @@ auto require_value(pwm::result<T>&& value) -> T {
 }
 
 auto open_drm_device() -> pwm::raii<drm::device> {
-    auto device = require_value(drm::device::create("/dev/dri/card1"));
+    auto device = require_value(drm::device::open_first_available());
     return pwm::raii{std::move(device)};
 }
 

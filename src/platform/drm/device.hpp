@@ -356,6 +356,8 @@ class device {
 
     [[nodiscard]] static auto create(const fs::path& path) noexcept -> result<device>;
 
+    [[nodiscard]] static auto open_first_available() noexcept -> result<device>;
+
     [[nodiscard]] auto set_master() const noexcept -> result<void>;
 
     [[nodiscard]] auto drop_master() const noexcept -> result<void>;

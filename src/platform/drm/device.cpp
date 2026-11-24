@@ -4,6 +4,9 @@
 #include <platform/drm/device.hpp>
 #include <platform/event/poll.hpp>
 
+#include <string>
+#include <system_error>
+
 namespace pwm::platform::drm {
 
 auto device::create(const fs::path& path) noexcept -> result<device> {
@@ -12,6 +15,27 @@ auto device::create(const fs::path& path) noexcept -> result<device> {
         return std::unexpected(make_error(error_code::io, "open DRM device failed"));
     }
     return device{fd};
+}
+
+auto device::open_first_available() noexcept -> result<device> {
+    std::error_code error;
+    std::filesystem::directory_iterator iterator{"/dev/dri", error};
+    if (error) {
+        return std::unexpected(make_error(error_code::not_found, "cannot open /dev/dri"));
+    }
+
+    for (const auto& entry : iterator) {
+        const std::string name = entry.path().filename().string();
+        if (!name.starts_with("card")) {
+            continue;
+        }
+        auto device = create(entry.path());
+        if (device) {
+            return device;
+        }
+    }
+
+    return std::unexpected(make_error(error_code::not_found, "no DRM card device found"));
 }
 
 auto device::set_master() const noexcept -> result<void> {

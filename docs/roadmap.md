@@ -96,7 +96,7 @@ P0 地基 ──► P1 点亮 ──► P2 画布 ──► P3 语言 ──► 
 
 ### 交付物
 
-- [x] DRM 设备枚举与主输出选择（connected connector + 首个 mode）。
+- [x] DRM 设备枚举（`/dev/dri/card*`）与主输出选择（connected connector + 首个 mode）。
 - [x] 原子模式设置：首选模式、connector/CRTC/plane 属性。
 - [x] Page flip 完成事件与 `poll` 等待。
 - [x] 双缓冲 page flip 动画，避免撕裂。
