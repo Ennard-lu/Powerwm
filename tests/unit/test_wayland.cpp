@@ -890,12 +890,15 @@ auto test_output_and_seat() -> bool {
     }
 
     std::array<std::byte, 4096> received{};
+    std::array<pwm::handle_t, 4> received_fds{};
+    pwm::u32 received_fd_count = 0;
     std::vector<std::byte> input;
     for (pwm::i32 attempt = 0; attempt < 100; ++attempt) {
-        auto result = client.receive(received, std::span<pwm::handle_t>{});
+        auto result = client.receive(received, received_fds);
         if (!result) {
             return false;
         }
+        received_fd_count = static_cast<pwm::u32>(result->fds);
         input.insert(input.end(), received.begin(), received.begin() + result->bytes);
         if (result->would_block || result->closed || !input.empty()) {
             break;
@@ -914,7 +917,8 @@ auto test_output_and_seat() -> bool {
         const auto payload = std::span<const std::byte>{input}.subspan(
             offset + sizeof(wayland::message_header),
             header->size - sizeof(wayland::message_header));
-        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        wayland::protocol_reader reader{
+            payload, std::span<const pwm::handle_t>{received_fds.data(), received_fd_count}};
         if (header->object == 3) {
             switch (header->opcode) {
             case 0:
@@ -964,6 +968,13 @@ auto test_output_and_seat() -> bool {
                 return false;
             }
             ++seat_events;
+        } else if (header->object == 6 && header->opcode == 0) {
+            auto event = generated::wl_keyboard::event_keymap::decode(reader);
+            if (!event) {
+                return false;
+            }
+            auto owned = transport::file_descriptor::adopt(std::get<1>(event->arguments));
+            static_cast<void>(owned);
         } else if (header->object == 2 && header->opcode == 0) {
             if (!generated::wl_registry::event_global::decode(reader)) {
                 return false;
@@ -973,8 +984,51 @@ auto test_output_and_seat() -> bool {
         }
         offset += header->size;
     }
-    return output_events == 6 && seat_events == 2 && server.objects().find(5) != nullptr &&
-           server.objects().find(6) != nullptr;
+    if (output_events != 6 || seat_events != 2 || server.objects().find(5) == nullptr ||
+        server.objects().find(6) == nullptr) {
+        return false;
+    }
+
+    if (!display.send_keyboard_enter(5) || !display.send_keyboard_modifiers(0, 0, 0, 0) ||
+        !display.send_keyboard_key(1, 30, true) || !server.flush()) {
+        return false;
+    }
+    std::array<std::byte, 1024> keyboard_bytes{};
+    auto keyboard_result = client.receive(keyboard_bytes, std::span<pwm::handle_t>{});
+    if (!keyboard_result) {
+        return false;
+    }
+    const std::span<const std::byte> keyboard_input{keyboard_bytes.data(), keyboard_result->bytes};
+    pwm::usize keyboard_offset = 0;
+    pwm::u32 keyboard_events = 0;
+    while (keyboard_offset + sizeof(wayland::message_header) <= keyboard_input.size()) {
+        auto header = wayland::decode_header(keyboard_input.subspan(keyboard_offset));
+        if (!header || header->object != 6) {
+            return false;
+        }
+        const auto payload =
+            keyboard_input.subspan(keyboard_offset + sizeof(wayland::message_header),
+                                   header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->opcode == 1) {
+            if (!generated::wl_keyboard::event_enter::decode(reader)) {
+                return false;
+            }
+        } else if (header->opcode == 3) {
+            if (!generated::wl_keyboard::event_key::decode(reader)) {
+                return false;
+            }
+        } else if (header->opcode == 4) {
+            if (!generated::wl_keyboard::event_modifiers::decode(reader)) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        keyboard_offset += header->size;
+        ++keyboard_events;
+    }
+    return keyboard_events == 3;
 }
 
 auto test_generated_descriptors() -> bool {

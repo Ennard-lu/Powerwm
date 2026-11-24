@@ -209,6 +209,13 @@ if(POWERWM_BUILD_BRINGUP_TOOL)
     )
     add_dependencies(powerwm_render_benchmark powerwm_shaders)
 
+    add_executable(powerwm_wayland_kms_compositor tools/wayland_kms_compositor.cpp)
+    target_link_libraries(powerwm_wayland_kms_compositor PRIVATE powerwm_wayland powerwm_seat powerwm_input)
+    target_compile_definitions(powerwm_wayland_kms_compositor PRIVATE
+        POWERWM_SHADER_DIR="${POWERWM_SHADER_BINARY_DIR}"
+    )
+    add_dependencies(powerwm_wayland_kms_compositor powerwm_shaders)
+
     add_executable(powerwm_wayland_server tools/wayland_server.cpp)
     target_link_libraries(powerwm_wayland_server PRIVATE powerwm_wayland)
 

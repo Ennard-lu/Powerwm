@@ -177,6 +177,10 @@ class core_protocol {
 
     [[nodiscard]] auto buffer_pixels(object_id id) noexcept -> result<std::span<const std::byte>>;
 
+    [[nodiscard]] auto keyboards() const noexcept -> std::span<const object_id>;
+
+    [[nodiscard]] auto send_keyboard_keymap(object_id id) -> result<void>;
+
     auto set_surface_commit_callback(surface_commit_callback callback, void* context) noexcept
         -> void;
 
@@ -211,6 +215,9 @@ class core_protocol {
     std::vector<std::unique_ptr<pointer_object>> pointers_;
     std::vector<std::unique_ptr<keyboard_object>> keyboards_;
     std::vector<std::unique_ptr<touch_object>> touches_;
+    std::vector<object_id> pointer_ids_;
+    std::vector<object_id> keyboard_ids_;
+    std::vector<object_id> touch_ids_;
     u32 output_width_ = 1280;
     u32 output_height_ = 720;
     u32 output_refresh_hz_ = 60;

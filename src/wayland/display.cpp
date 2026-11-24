@@ -91,6 +91,67 @@ auto display_service::send_registry_globals(object_id registry) -> result<void> 
     return {};
 }
 
+auto display_service::keyboards() const noexcept -> std::span<const object_id> {
+    return core_.keyboards();
+}
+
+auto display_service::send_keyboard_enter(object_id surface) -> result<void> {
+    for (const object_id keyboard : core_.keyboards()) {
+        generated::wl_keyboard::event_enter event{};
+        std::get<0>(event.arguments) = next_serial();
+        std::get<1>(event.arguments) = surface;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_keyboard::event_enter::encode(writer, keyboard, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto display_service::send_keyboard_key(u32 time_ms, u32 key, bool pressed) -> result<void> {
+    for (const object_id keyboard : core_.keyboards()) {
+        generated::wl_keyboard::event_key event{};
+        std::get<0>(event.arguments) = next_serial();
+        std::get<1>(event.arguments) = time_ms;
+        std::get<2>(event.arguments) = key;
+        std::get<3>(event.arguments) = pressed ? 1U : 0U;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_keyboard::event_key::encode(writer, keyboard, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto display_service::send_keyboard_modifiers(u32 depressed, u32 latched, u32 locked, u32 group)
+    -> result<void> {
+    for (const object_id keyboard : core_.keyboards()) {
+        generated::wl_keyboard::event_modifiers event{};
+        std::get<0>(event.arguments) = next_serial();
+        std::get<1>(event.arguments) = depressed;
+        std::get<2>(event.arguments) = latched;
+        std::get<3>(event.arguments) = locked;
+        std::get<4>(event.arguments) = group;
+        protocol_writer writer;
+        if (auto encoded = generated::wl_keyboard::event_modifiers::encode(writer, keyboard, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
 auto display_service::set_surface_commit_callback(surface_commit_callback callback,
                                                   void* context) noexcept -> void {
     core_.set_surface_commit_callback(callback, context);

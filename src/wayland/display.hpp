@@ -67,6 +67,15 @@ class display_service {
 
     [[nodiscard]] auto send_callback_done(object_id callback, u32 data) -> result<void>;
 
+    [[nodiscard]] auto keyboards() const noexcept -> std::span<const object_id>;
+
+    [[nodiscard]] auto send_keyboard_enter(object_id surface) -> result<void>;
+
+    [[nodiscard]] auto send_keyboard_key(u32 time_ms, u32 key, bool pressed) -> result<void>;
+
+    [[nodiscard]] auto send_keyboard_modifiers(u32 depressed, u32 latched, u32 locked, u32 group)
+        -> result<void>;
+
     auto set_surface_commit_callback(surface_commit_callback callback, void* context) noexcept
         -> void;
 

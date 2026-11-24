@@ -166,9 +166,12 @@ libwayland.
 - [ ] Vulkan texture upload and surface scene rendering;
 - [x] `wl_output` geometry/mode/scale/name/description events and `wl_seat`
   pointer/keyboard/touch object creation;
+- [x] keyboard keymap, enter, key, and modifier event delivery;
+- [x] protocol surfaces uploaded to Vulkan textures and presented through KMS;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [x] in-tree socket handshake and raw-wire client verification;
+- [x] in-tree socket handshake, shm surface commit, and KMS presentation;
 - [ ] real external client handshake and wire fuzzing.
 
 Exit: handshake with real libwayland clients; fd stress test; protocol errors do not

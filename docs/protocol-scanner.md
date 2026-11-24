@@ -136,5 +136,10 @@ clients, dispatches requests, and logs committed surface buffers. A raw wire cli
 connect to validate `wl_registry`, `wl_display.sync`, and global discovery without
 `libwayland`.
 
-Client-id lifetime, coroutine sessions, input event delivery, and rendering the protocol
-scene through KMS are the next Phase 3 steps.
+`powerwm_wayland_kms_compositor` combines that server with the Vulkan scene renderer and
+KMS presentation. Client shm commits become textures, scene nodes, DMA-BUF frames, and
+atomic page flips. Keyboard keymap and key/modifier events are forwarded through
+`wl_keyboard`.
+
+Client-id lifetime, pointer/touch input routing, clipboard/DnD, linux-dmabuf, coroutine
+sessions, and real external client validation are the next Phase 3 steps.

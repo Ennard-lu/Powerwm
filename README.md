@@ -56,6 +56,7 @@ Working today:
 - shm buffer memory mapping and surface commit pixel callbacks
 - output and seat protocol objects with pointer/keyboard/touch creation
 - `powerwm_wayland_server` event-loop protocol server over a Unix socket
+- `powerwm_wayland_kms_compositor` displaying protocol shm surfaces through Vulkan and KMS
 
 Still ahead:
 

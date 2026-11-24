@@ -4,6 +4,8 @@
 #include <wayland/display.hpp>
 
 #include <algorithm>
+#include <cstring>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <wayland_bindings.hpp>
@@ -51,14 +53,23 @@ auto touch_object::request_release() -> result<void> {
 
 auto seat_object::request_get_pointer(object_id pointer) -> result<void> {
     auto* object = core->store(core->pointers_, pointer_object{core, pointer});
-    return add_object<pointer_object, generated::wl_pointer>(
+    auto added = add_object<pointer_object, generated::wl_pointer>(
         core->service().connection_ref().objects(), pointer, *object);
+    if (added) {
+        core->pointer_ids_.push_back(pointer);
+    }
+    return added;
 }
 
 auto seat_object::request_get_keyboard(object_id keyboard) -> result<void> {
     auto* object = core->store(core->keyboards_, keyboard_object{core, keyboard});
-    return add_object<keyboard_object, generated::wl_keyboard>(
+    auto added = add_object<keyboard_object, generated::wl_keyboard>(
         core->service().connection_ref().objects(), keyboard, *object);
+    if (added) {
+        core->keyboard_ids_.push_back(keyboard);
+        return core->send_keyboard_keymap(keyboard);
+    }
+    return added;
 }
 
 auto seat_object::request_get_touch(object_id touch) -> result<void> {
@@ -355,6 +366,45 @@ auto core_protocol::buffer_pixels(object_id id) noexcept -> result<std::span<con
         return std::unexpected(make_error(error_code::protocol, "buffer is outside its pool"));
     }
     return data.subspan(start, length);
+}
+
+auto core_protocol::keyboards() const noexcept -> std::span<const object_id> {
+    return keyboard_ids_;
+}
+
+auto core_protocol::send_keyboard_keymap(object_id id) -> result<void> {
+    constexpr std::string_view keymap = "xkb_keymap {\n"
+                                        "  xkb_keycodes { include \"evdev+aliases(qwerty)\" };\n"
+                                        "  xkb_types { include \"complete\" };\n"
+                                        "  xkb_compat { include \"complete\" };\n"
+                                        "  xkb_symbols { include \"pc+us+inet(evdev)\" };\n"
+                                        "  xkb_geometry { include \"pc(pc105)\" };\n"
+                                        "};\n";
+    auto file = platform::wayland::create_anonymous_file("powerwm-keymap", keymap.size() + 1);
+    if (!file) {
+        return std::unexpected(file.error());
+    }
+    auto mapping = platform::wayland::mapped_region::create(file->fd(), 0, keymap.size() + 1, true);
+    if (!mapping) {
+        return std::unexpected(mapping.error());
+    }
+    auto writable = mapping->writable_data();
+    std::memcpy(writable.data(), keymap.data(), keymap.size());
+    writable[keymap.size()] = std::byte{0};
+
+    generated::wl_keyboard::event_keymap event{};
+    std::get<0>(event.arguments) = 1;
+    std::get<1>(event.arguments) = file->fd();
+    std::get<2>(event.arguments) = static_cast<u32>(keymap.size() + 1);
+
+    protocol_writer writer;
+    if (auto encoded = generated::wl_keyboard::event_keymap::encode(writer, id, event); !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    if (auto queued = service_->queue_event(writer); !queued) {
+        return std::unexpected(queued.error());
+    }
+    return service_->connection_ref().flush();
 }
 
 auto core_protocol::service() noexcept -> display_service& {
