@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+
+#include <string_view>
+
+namespace pwm::build_info {
+
+inline constexpr std::string_view project_name = "@PROJECT_NAME@";
+inline constexpr std::string_view project_version = "@PROJECT_VERSION@";
+inline constexpr std::string_view git_commit = "@POWERWM_GIT_COMMIT@";
+inline constexpr std::string_view git_commit_short = "@POWERWM_GIT_COMMIT_SHORT@";
+inline constexpr std::string_view git_branch = "@POWERWM_GIT_BRANCH@";
+inline constexpr std::string_view git_describe = "@POWERWM_GIT_DESCRIBE@";
+inline constexpr bool git_dirty = @POWERWM_GIT_DIRTY_BOOL@;
+inline constexpr std::string_view build_timestamp_utc = "@POWERWM_BUILD_TIMESTAMP@";
+inline constexpr std::string_view build_type = "@POWERWM_BUILD_TYPE@";
+inline constexpr std::string_view compiler_id = "@POWERWM_COMPILER_ID@";
+inline constexpr std::string_view compiler_version = "@POWERWM_COMPILER_VERSION@";
+inline constexpr std::string_view compiler_path = "@POWERWM_COMPILER_PATH@";
+inline constexpr std::string_view generator = "@POWERWM_GENERATOR@";
+inline constexpr std::string_view system_name = "@POWERWM_SYSTEM_NAME@";
+inline constexpr std::string_view system_processor = "@POWERWM_SYSTEM_PROCESSOR@";
+inline constexpr std::string_view cxx_standard = "@POWERWM_CXX_STANDARD@";
+inline constexpr std::string_view cxx_flags = "@POWERWM_CXX_FLAGS@";
+inline constexpr std::string_view build_directory = "@POWERWM_BUILD_DIRECTORY@";
+inline constexpr std::string_view build_features = "@POWERWM_BUILD_FEATURES@";
+
+}

@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:strict_string_checks=1
+  UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+
+jobs:
+  format:
+    name: Format (clang-format)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install clang-format
+        run: pip install "clang-format==23.1.5"
+      - name: Check formatting
+        shell: bash
+        run: |
+          mapfile -t files < <(git ls-files '*.cpp' '*.hpp' '*.h' '*.cc' '*.cxx')
+          if ((${#files[@]} == 0)); then
+            echo "No C++ files to check."
+            exit 0
+          fi
+          clang-format --dry-run --Werror "${files[@]}"
+
+  policy:
+    name: Policy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check no exceptions / no libwayland / C API wrapping
+        shell: bash
+        run: bash tools/check_policy.sh
+      - name: Check code comments
+        shell: bash
+        run: python3 tools/check_comments.py
+
+  build:
+    name: Build & Test (${{ matrix.preset }})
+    runs-on: ubuntu-24.04
+    container:
+      image: gcc:16
+    strategy:
+      fail-fast: false
+      matrix:
+        preset:
+          - dev
+          - release
+          - asan
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates \
+            git \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libdrm-dev \
+            libvulkan-dev \
+            vulkan-validationlayers \
+            mesa-vulkan-drivers
+          rm -rf /var/lib/apt/lists/*
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure
