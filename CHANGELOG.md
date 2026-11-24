@@ -53,6 +53,8 @@ pre-1.0 `0.x.y` convention.
   `wl_shm_pool`, and `wl_buffer` with damage, commit, and frame callback handling.
 - Phase 3 xdg-shell: `xdg_wm_base`, `xdg_positioner`, `xdg_surface`, `xdg_toplevel`,
   and `xdg_popup` state, configure/acknowledge flow, role metadata, and transport test.
+- Phase 3 shm: memfd mapping, buffer pixel views, `SCM_RIGHTS` pool transfer, and
+  surface commit callback with validated buffer dimensions/stride/format.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
   `powerwm_input_probe`, `powerwm_seat_probe`, `powerwm_vulkan_pipeline_probe`.
 

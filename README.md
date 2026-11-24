@@ -53,6 +53,7 @@ Working today:
   `wl_registry` handling
 - compositor, region, surface, shm pool, and buffer protocol state with frame callbacks
 - xdg-shell role state, configure/acknowledge handshake, and popup events
+- shm buffer memory mapping and surface commit pixel callbacks
 
 Still ahead:
 

@@ -2,6 +2,7 @@
 
 #include <base/result.hpp>
 #include <base/types.hpp>
+#include <platform/wayland/mapped_region.hpp>
 #include <platform/wayland/socket.hpp>
 #include <wayland/connection.hpp>
 #include <wayland/dispatch.hpp>
@@ -29,6 +30,7 @@ namespace {
 namespace wayland = pwm::wayland;
 namespace generated = pwm::wayland::generated;
 
+using pwm::i32;
 using pwm::u16;
 using pwm::u32;
 using wayland::object_id;
@@ -693,6 +695,136 @@ auto test_xdg_shell_transport() -> bool {
     return delete_count == 5 && server.objects().find(8) == nullptr;
 }
 
+struct commit_capture {
+    object_id surface = 0;
+    object_id buffer = 0;
+    u32 width = 0;
+    u32 height = 0;
+    u32 stride = 0;
+    u32 format = 0;
+    std::vector<std::byte> pixels;
+};
+
+auto capture_commit(void* context, const wayland::surface_commit_event& event) -> void {
+    auto& capture = *static_cast<commit_capture*>(context);
+    capture.surface = event.surface;
+    capture.buffer = event.buffer;
+    capture.width = static_cast<u32>(event.width);
+    capture.height = static_cast<u32>(event.height);
+    capture.stride = static_cast<u32>(event.stride);
+    capture.format = event.format;
+    capture.pixels.assign(event.pixels.begin(), event.pixels.end());
+}
+
+auto test_shm_commit() -> bool {
+    namespace transport = pwm::platform::wayland;
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-shm.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    commit_capture capture;
+    display.set_surface_commit_callback(capture_commit, &capture);
+    const u32 compositor_global = display.add_global("wl_compositor", 4);
+    const u32 shm_global = display.add_global("wl_shm", 1);
+
+    constexpr pwm::u32 width = 8;
+    constexpr pwm::u32 height = 8;
+    constexpr pwm::u32 stride = width * 4;
+    constexpr pwm::usize pool_size = stride * height;
+    auto file = transport::create_anonymous_file("powerwm-test-shm", pool_size);
+    if (!file) {
+        return false;
+    }
+    auto mapping = transport::mapped_region::create(file->fd(), 0, pool_size, true);
+    if (!mapping) {
+        return false;
+    }
+    auto pixels = mapping->writable_data();
+    for (pwm::usize index = 0; index < pixels.size(); ++index) {
+        pixels[index] = static_cast<std::byte>(index & 0xFFU);
+    }
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(compositor_global));
+    static_cast<void>(requests.write_string("wl_compositor"));
+    static_cast<void>(requests.write_u32(4));
+    static_cast<void>(requests.write_new_id(3));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(shm_global));
+    static_cast<void>(requests.write_string("wl_shm"));
+    static_cast<void>(requests.write_u32(1));
+    static_cast<void>(requests.write_new_id(4));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(3, 0));
+    static_cast<void>(requests.write_new_id(5));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 0));
+    static_cast<void>(requests.write_new_id(6));
+    static_cast<void>(requests.write_fd(file->fd()));
+    static_cast<void>(requests.write_i32(static_cast<i32>(pool_size)));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(6, 0));
+    static_cast<void>(requests.write_new_id(7));
+    static_cast<void>(requests.write_i32(0));
+    static_cast<void>(requests.write_i32(static_cast<i32>(width)));
+    static_cast<void>(requests.write_i32(static_cast<i32>(height)));
+    static_cast<void>(requests.write_i32(static_cast<i32>(stride)));
+    static_cast<void>(requests.write_u32(0));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(5, 1));
+    static_cast<void>(requests.write_object(7));
+    static_cast<void>(requests.write_i32(0));
+    static_cast<void>(requests.write_i32(0));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(5, 3));
+    static_cast<void>(requests.write_new_id(8));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(5, 6));
+    static_cast<void>(requests.end_message());
+
+    auto sent = client.send(requests.bytes(), requests.fds());
+    if (!sent || sent->bytes != requests.bytes().size()) {
+        return false;
+    }
+    if (!server.receive_available()) {
+        return false;
+    }
+    auto dispatched = server.dispatch_available();
+    if (!dispatched || *dispatched != 9) {
+        return false;
+    }
+    if (!server.flush()) {
+        return false;
+    }
+
+    return capture.surface == 5 && capture.buffer == 7 && capture.width == width &&
+           capture.height == height && capture.stride == stride && capture.format == 0 &&
+           capture.pixels.size() == pool_size && capture.pixels[0] == std::byte{0} &&
+           capture.pixels[1] == std::byte{1} && capture.pixels[255] == std::byte{255};
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -743,6 +875,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_shm_commit()) {
+        std::println(stderr, "shm commit test failed");
         return EXIT_FAILURE;
     }
     if (!test_xdg_shell_transport()) {

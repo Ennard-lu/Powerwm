@@ -74,6 +74,11 @@ auto shm_pool_object::request_resize(i32 size) -> result<void> {
     if (size <= 0) {
         return std::unexpected(make_error(error_code::protocol, "shm pool size is invalid"));
     }
+    auto resized = platform::wayland::mapped_region::create(fd.fd(), 0, size);
+    if (!resized) {
+        return std::unexpected(resized.error());
+    }
+    mapping = std::move(*resized);
     this->size = size;
     return {};
 }
@@ -123,6 +128,24 @@ auto surface_object::request_set_input_region(object_id region) -> result<void> 
 }
 
 auto surface_object::request_commit() -> result<void> {
+    surface_commit_event event{.surface = id, .buffer = buffer};
+    if (buffer != 0) {
+        const buffer_object* committed = core->buffer(buffer);
+        if (committed == nullptr) {
+            return std::unexpected(make_error(error_code::protocol, "surface buffer is unknown"));
+        }
+        auto committed_pixels = core->buffer_pixels(buffer);
+        if (!committed_pixels) {
+            return std::unexpected(committed_pixels.error());
+        }
+        event.width = committed->width;
+        event.height = committed->height;
+        event.stride = committed->stride;
+        event.format = committed->format;
+        event.pixels = *committed_pixels;
+    }
+    core->notify_commit(event);
+
     for (const object_id callback : frame_callbacks) {
         if (auto sent = core->service().send_callback_done(callback, core->service().next_serial());
             !sent) {
@@ -201,8 +224,13 @@ auto core_protocol::create_pool(object_id id, handle_t fd, i32 size) -> result<v
     if (size <= 0) {
         return std::unexpected(make_error(error_code::protocol, "shm pool size is invalid"));
     }
-    auto* object = store(
-        pools_, shm_pool_object{this, id, platform::wayland::file_descriptor::adopt(fd), size});
+    auto owned = platform::wayland::file_descriptor::adopt(fd);
+    auto mapping = platform::wayland::mapped_region::create(owned.fd(), 0, size);
+    if (!mapping) {
+        return std::unexpected(mapping.error());
+    }
+    auto* object =
+        store(pools_, shm_pool_object{this, id, std::move(owned), size, std::move(*mapping)});
     return add_object<shm_pool_object, generated::wl_shm_pool>(service_->connection_ref().objects(),
                                                                id, *object);
 }
@@ -223,8 +251,47 @@ auto core_protocol::surface(object_id id) noexcept -> surface_object* {
     return iterator == surfaces_.end() ? nullptr : iterator->get();
 }
 
+auto core_protocol::buffer(object_id id) noexcept -> buffer_object* {
+    const auto iterator = std::ranges::find_if(
+        buffers_, [id](const std::unique_ptr<buffer_object>& object) { return object->id == id; });
+    return iterator == buffers_.end() ? nullptr : iterator->get();
+}
+
+auto core_protocol::buffer_pixels(object_id id) noexcept -> result<std::span<const std::byte>> {
+    buffer_object* target = buffer(id);
+    if (target == nullptr) {
+        return std::unexpected(make_error(error_code::protocol, "buffer is unknown"));
+    }
+    const auto pool =
+        std::ranges::find_if(pools_, [target](const std::unique_ptr<shm_pool_object>& object) {
+            return object->id == target->pool;
+        });
+    if (pool == pools_.end()) {
+        return std::unexpected(make_error(error_code::protocol, "buffer pool is unknown"));
+    }
+    const usize start = static_cast<usize>(target->offset);
+    const usize length = static_cast<usize>(target->stride) * static_cast<usize>(target->height);
+    const auto data = (*pool)->mapping.data();
+    if (start > data.size() || length > data.size() - start) {
+        return std::unexpected(make_error(error_code::protocol, "buffer is outside its pool"));
+    }
+    return data.subspan(start, length);
+}
+
 auto core_protocol::service() noexcept -> display_service& {
     return *service_;
+}
+
+auto core_protocol::set_surface_commit_callback(surface_commit_callback callback,
+                                                void* context) noexcept -> void {
+    commit_callback_ = callback;
+    commit_context_ = context;
+}
+
+auto core_protocol::notify_commit(const surface_commit_event& event) noexcept -> void {
+    if (commit_callback_ != nullptr) {
+        commit_callback_(commit_context_, event);
+    }
 }
 
 auto core_protocol::send_shm_formats(object_id id) -> result<void> {

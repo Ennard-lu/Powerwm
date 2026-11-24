@@ -111,6 +111,7 @@ add_custom_target(powerwm_protocols DEPENDS ${POWERWM_PROTOCOL_OUTPUTS})
 
 add_library(powerwm_wayland STATIC
     src/platform/wayland/fd.cpp
+    src/platform/wayland/mapped_region.cpp
     src/platform/wayland/socket.cpp
     src/wayland/connection.cpp
     src/wayland/core.cpp

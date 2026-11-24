@@ -63,6 +63,9 @@ class display_service {
 
     [[nodiscard]] auto send_callback_done(object_id callback, u32 data) -> result<void>;
 
+    auto set_surface_commit_callback(surface_commit_callback callback, void* context) noexcept
+        -> void;
+
   private:
     friend struct display_object;
     friend struct registry_object;

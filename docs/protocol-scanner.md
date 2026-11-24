@@ -123,7 +123,9 @@ messages from the byte stream and routes them through the object table.
   track protocol state, damage, commit, and frame callbacks;
 - `xdg_wm_base`, `xdg_positioner`, `xdg_surface`, `xdg_toplevel`, and `xdg_popup`
   track role state, titles, app ids, geometry, configure serials, and popup events;
-- surface buffers are tracked but not yet sampled by the renderer.
+- shm pools are mmap'd; surface commit invokes a pixel callback with the current buffer
+  view, ready for texture upload;
+- Vulkan texture upload and scene rendering are the next integration step.
 
 Client-id lifetime, compositor/surface objects, coroutine sessions, and real external
 clients are the next Phase 3 steps.

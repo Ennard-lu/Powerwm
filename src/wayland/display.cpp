@@ -78,6 +78,11 @@ auto display_service::send_registry_globals(object_id registry) -> result<void> 
     return {};
 }
 
+auto display_service::set_surface_commit_callback(surface_commit_callback callback,
+                                                  void* context) noexcept -> void {
+    core_.set_surface_commit_callback(callback, context);
+}
+
 auto display_service::send_callback_done(object_id callback, u32 data) -> result<void> {
     generated::wl_callback::event_done done{};
     std::get<0>(done.arguments) = data;

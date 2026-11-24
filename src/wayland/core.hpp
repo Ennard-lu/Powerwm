@@ -6,6 +6,7 @@
 #include <base/result.hpp>
 #include <base/types.hpp>
 #include <platform/wayland/fd.hpp>
+#include <platform/wayland/mapped_region.hpp>
 #include <wayland/wire.hpp>
 
 #include <memory>
@@ -17,6 +18,18 @@ namespace pwm::wayland {
 
 class display_service;
 class core_protocol;
+
+struct surface_commit_event {
+    object_id surface = 0;
+    object_id buffer = 0;
+    i32 width = 0;
+    i32 height = 0;
+    i32 stride = 0;
+    u32 format = 0;
+    std::span<const std::byte> pixels;
+};
+
+using surface_commit_callback = auto (*)(void* context, const surface_commit_event& event) -> void;
 
 struct compositor_object {
     core_protocol* core = nullptr;
@@ -55,6 +68,7 @@ struct shm_pool_object {
     object_id id = 0;
     platform::wayland::file_descriptor fd;
     i32 size = 0;
+    platform::wayland::mapped_region mapping;
 
     [[nodiscard]] auto request_create_buffer(object_id buffer, i32 offset, i32 width, i32 height,
                                              i32 stride, u32 format) -> result<void>;
@@ -112,7 +126,16 @@ class core_protocol {
 
     [[nodiscard]] auto surface(object_id id) noexcept -> surface_object*;
 
+    [[nodiscard]] auto buffer(object_id id) noexcept -> buffer_object*;
+
+    [[nodiscard]] auto buffer_pixels(object_id id) noexcept -> result<std::span<const std::byte>>;
+
+    auto set_surface_commit_callback(surface_commit_callback callback, void* context) noexcept
+        -> void;
+
     [[nodiscard]] auto service() noexcept -> display_service&;
+
+    auto notify_commit(const surface_commit_event& event) noexcept -> void;
 
   private:
     [[nodiscard]] auto send_shm_formats(object_id id) -> result<void>;
@@ -132,6 +155,8 @@ class core_protocol {
     std::vector<std::unique_ptr<shm_pool_object>> pools_;
     std::vector<std::unique_ptr<shm_object>> shms_;
     std::vector<std::unique_ptr<surface_object>> surfaces_;
+    surface_commit_callback commit_callback_ = nullptr;
+    void* commit_context_ = nullptr;
 };
 
 }

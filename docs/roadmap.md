@@ -162,7 +162,9 @@ libwayland.
   server objects with surface state and commit/frame callbacks;
 - [x] basic `xdg_wm_base`, `xdg_positioner`, `xdg_surface`, `xdg_toplevel`, and
   `xdg_popup` state with configure/ack_configure;
-- [ ] surface buffer rendering, seat, and output objects;
+- [x] shm buffer mmap and surface commit pixel callback;
+- [ ] Vulkan texture upload and surface scene rendering;
+- [ ] seat and output objects;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [ ] real external client handshake and wire fuzzing.
