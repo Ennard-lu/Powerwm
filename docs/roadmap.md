@@ -184,10 +184,12 @@ libwayland.
 - [x] `wlr-layer-shell-unstable-v1` surfaces with layer, anchor, size, margin,
   exclusive zone, keyboard interactivity, configure, and ack;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
+- [x] coroutine `task<T>` and a per-client session coroutine in the KMS compositor;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [x] in-tree socket handshake and raw-wire client verification;
 - [x] in-tree socket handshake, shm surface commit, and KMS presentation;
-- [ ] broader real-client matrix (GTK, Qt, foot) and wire fuzzing.
+- [x] deterministic wire-message and protocol-XML fuzz coverage;
+- [ ] broader real-client matrix (GTK, Qt, foot).
 
 Exit: handshake with real libwayland clients; fd stress test; protocol errors do not
 crash; 24-hour fuzz; no `libwayland-*` in `ldd`.

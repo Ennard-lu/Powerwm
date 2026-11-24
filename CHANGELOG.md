@@ -87,6 +87,9 @@ pre-1.0 `0.x.y` convention.
   rendering.
 - `wlr-layer-shell-unstable-v1`: layer surfaces with anchors, margins, explicit sizes,
   exclusive zones, keyboard interactivity, configure/ack, and scene placement.
+- Coroutine `pwm::task<T>` and a per-client KMS compositor session coroutine that resumes
+  on readable events.
+- Deterministic wire-message and protocol-XML fuzz coverage.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

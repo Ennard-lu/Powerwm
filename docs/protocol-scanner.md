@@ -151,7 +151,9 @@ cross-client clipboard selection, mime offers, and fd transfer, and tracks drag-
 targets with enter, motion, drop, action, and finish events. `linux-dmabuf-v1` exposes
 ARGB8888/XRGB8888 with the linear modifier and imports client buffers into Vulkan
 textures. `wlr-layer-shell-unstable-v1` places anchored layer surfaces with margins,
-exclusive zones, and keyboard interactivity.
+exclusive zones, and keyboard interactivity. The KMS compositor drives each client
+through a coroutine session, and deterministic fuzz cases cover message decoding and XML
+parsing.
 
 Client-id lifetime, drag-and-drop, linux-dmabuf, layer-shell, coroutine sessions, and
 broader real-client validation are the next Phase 3 steps.

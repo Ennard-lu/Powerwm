@@ -2293,6 +2293,74 @@ auto test_layer_shell() -> bool {
     return server.objects().find(6) == nullptr;
 }
 
+struct fuzz_region_implementation {
+    auto request_add(i32 x, i32 y, i32 width, i32 height) -> pwm::result<void> {
+        static_cast<void>(x);
+        static_cast<void>(y);
+        static_cast<void>(width);
+        static_cast<void>(height);
+        return {};
+    }
+
+    auto request_subtract(i32 x, i32 y, i32 width, i32 height) -> pwm::result<void> {
+        static_cast<void>(x);
+        static_cast<void>(y);
+        static_cast<void>(width);
+        static_cast<void>(height);
+        return {};
+    }
+
+    auto request_destroy() -> pwm::result<void> {
+        return {};
+    }
+};
+
+auto test_wire_fuzz() -> bool {
+    wayland::object_table table;
+    fuzz_region_implementation region;
+    if (!wayland::add_object<fuzz_region_implementation, generated::wl_region>(table, 3, region)) {
+        return false;
+    }
+
+    u32 state = 0x12345678;
+    const auto next = [&state]() {
+        state = state * 1664525U + 1013904223U;
+        return state;
+    };
+    std::array<std::byte, 256> storage{};
+    for (i32 iteration = 0; iteration < 20000; ++iteration) {
+        const auto length = static_cast<pwm::usize>(next() % storage.size());
+        for (pwm::usize index = 0; index < length; ++index) {
+            storage[index] = static_cast<std::byte>(next() & 0xFFU);
+        }
+        if (length >= sizeof(wayland::message_header)) {
+            static_cast<void>(
+                wayland::decode_header(std::span<const std::byte>{storage}.first(length)));
+        }
+        const auto opcode = static_cast<u16>(next() % 16U);
+        wayland::protocol_reader reader{std::span<const std::byte>{storage}.first(length),
+                                        std::span<const pwm::handle_t>{}};
+        static_cast<void>(table.dispatch(3, opcode, reader));
+    }
+
+    constexpr std::string_view base =
+        R"(<?xml version="1.0"?><protocol name="fuzz"><interface name="fuzz" version="1"><request name="do"><arg name="v" type="uint"/></request></interface></protocol>)";
+    std::string document;
+    for (i32 iteration = 0; iteration < 2000; ++iteration) {
+        document.assign(base);
+        const auto edits = next() % 8U;
+        for (u32 edit = 0; edit < edits && !document.empty(); ++edit) {
+            const auto index = static_cast<pwm::usize>(next() % document.size());
+            document[index] = static_cast<char>(next() & 0x7FU);
+        }
+        auto tree = wayland::parse_xml(document);
+        if (tree) {
+            static_cast<void>(wayland::build_protocol(*tree));
+        }
+    }
+    return true;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -2343,6 +2411,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_wire_fuzz()) {
+        std::println(stderr, "wire fuzz test failed");
         return EXIT_FAILURE;
     }
     if (!test_layer_shell()) {

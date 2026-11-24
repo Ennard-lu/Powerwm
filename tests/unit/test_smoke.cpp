@@ -2,7 +2,9 @@
 
 #include <base/raii.hpp>
 #include <base/result.hpp>
+#include <base/task.hpp>
 
+#include <coroutine>
 #include <cstdlib>
 #include <utility>
 
@@ -19,6 +21,35 @@ struct test_resource {
         *destroyed = true;
     }
 };
+
+auto test_task() -> bool {
+    auto immediate = []() -> pwm::task<pwm::i32> { co_return 7; };
+    auto value = immediate();
+    if (value.done()) {
+        return false;
+    }
+    value.resume();
+    if (!value.done() || value.value() != 7) {
+        return false;
+    }
+
+    pwm::i32 counter = 0;
+    auto suspended = [](pwm::i32& count) -> pwm::task<void> {
+        ++count;
+        co_await std::suspend_always{};
+        ++count;
+    };
+    auto sequence = suspended(counter);
+    if (counter != 0) {
+        return false;
+    }
+    sequence.resume();
+    if (counter != 1 || sequence.done()) {
+        return false;
+    }
+    sequence.resume();
+    return counter == 2 && sequence.done();
+}
 
 auto test_result_type() -> bool {
     const pwm::result<pwm::i32> success{42};
@@ -62,6 +93,9 @@ auto test_raii_move_transfers_ownership() -> bool {
 }
 
 int main() {
+    if (!test_task()) {
+        return EXIT_FAILURE;
+    }
     if (!test_result_type()) {
         return EXIT_FAILURE;
     }

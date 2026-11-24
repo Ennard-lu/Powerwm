@@ -3,6 +3,7 @@
 #include <base/fatal.hpp>
 #include <base/raii.hpp>
 #include <base/result.hpp>
+#include <base/task.hpp>
 #include <platform/drm/device.hpp>
 #include <platform/drm/lookup.hpp>
 #include <platform/drm/properties.hpp>
@@ -125,8 +126,11 @@ struct client_session {
 
     compositor_state* compositor = nullptr;
     pwm::u32 index = 0;
+    [[nodiscard]] auto run() -> pwm::task<void>;
+
     wayland::connection connection;
     wayland::display_service display;
+    pwm::task<void> loop;
     bool closed = false;
 };
 
@@ -415,28 +419,36 @@ auto close_client(client_session& session) -> void {
     session.connection.disconnect();
 }
 
+auto client_session::run() -> pwm::task<void> {
+    while (!closed) {
+        co_await std::suspend_always{};
+        if (closed) {
+            co_return;
+        }
+        if (auto received = connection.receive_available(); !received) {
+            std::println(stderr, "client {} receive error: {}", index, received.error().message);
+            close_client(*this);
+            co_return;
+        }
+        if (auto dispatched = connection.dispatch_available(); !dispatched) {
+            std::println(stderr, "client {} dispatch error: {}", index, dispatched.error().message);
+            close_client(*this);
+            co_return;
+        }
+        if (auto flushed = connection.flush(); !flushed) {
+            std::println(stderr, "client {} flush error: {}", index, flushed.error().message);
+            close_client(*this);
+            co_return;
+        }
+        if (connection.closed()) {
+            close_client(*this);
+        }
+    }
+}
+
 auto on_client(void* context, event::poll_event) -> void {
     auto& session = *static_cast<client_session*>(context);
-    if (auto received = session.connection.receive_available(); !received) {
-        std::println(stderr, "client {} receive error: {}", session.index,
-                     received.error().message);
-        close_client(session);
-        return;
-    }
-    if (auto dispatched = session.connection.dispatch_available(); !dispatched) {
-        std::println(stderr, "client {} dispatch error: {}", session.index,
-                     dispatched.error().message);
-        close_client(session);
-        return;
-    }
-    if (auto flushed = session.connection.flush(); !flushed) {
-        std::println(stderr, "client {} flush error: {}", session.index, flushed.error().message);
-        close_client(session);
-        return;
-    }
-    if (session.connection.closed()) {
-        close_client(session);
-    }
+    session.loop.resume();
 }
 
 auto accept_client(compositor_state& state) -> void {
@@ -466,6 +478,8 @@ auto accept_client(compositor_state& state) -> void {
         !added) {
         return;
     }
+    session->loop = session->run();
+    session->loop.resume();
     std::println("client {} connected", session->index);
     state.clients.push_back(std::move(session));
 }
