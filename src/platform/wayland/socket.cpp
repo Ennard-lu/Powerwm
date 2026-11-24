@@ -44,6 +44,10 @@ stream::stream(stream&& other) noexcept : fd_(other.fd_) {
     other.fd_ = -1;
 }
 
+stream::~stream() noexcept {
+    destroy();
+}
+
 auto stream::operator=(stream&& other) noexcept -> stream& {
     if (this != &other) {
         destroy();
@@ -152,6 +156,10 @@ auto stream::destroy() const noexcept -> void {
 
 listener::listener(listener&& other) noexcept : fd_(other.fd_), path_(std::move(other.path_)) {
     other.fd_ = -1;
+}
+
+listener::~listener() noexcept {
+    destroy();
 }
 
 auto listener::operator=(listener&& other) noexcept -> listener& {

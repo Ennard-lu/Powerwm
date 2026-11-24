@@ -1,0 +1,137 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+
+#include <base/geometry.hpp>
+#include <base/result.hpp>
+#include <base/types.hpp>
+#include <platform/wayland/fd.hpp>
+#include <wayland/wire.hpp>
+
+#include <memory>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace pwm::wayland {
+
+class display_service;
+class core_protocol;
+
+struct compositor_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_create_surface(object_id surface) -> result<void>;
+    [[nodiscard]] auto request_create_region(object_id region) -> result<void>;
+    [[nodiscard]] auto request_release() -> result<void>;
+};
+
+struct region_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    std::vector<base::recti> rectangles;
+
+    [[nodiscard]] auto request_add(i32 x, i32 y, i32 width, i32 height) -> result<void>;
+    [[nodiscard]] auto request_subtract(i32 x, i32 y, i32 width, i32 height) -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+};
+
+struct buffer_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    object_id pool = 0;
+    i32 offset = 0;
+    i32 width = 0;
+    i32 height = 0;
+    i32 stride = 0;
+    u32 format = 0;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+};
+
+struct shm_pool_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    platform::wayland::file_descriptor fd;
+    i32 size = 0;
+
+    [[nodiscard]] auto request_create_buffer(object_id buffer, i32 offset, i32 width, i32 height,
+                                             i32 stride, u32 format) -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_resize(i32 size) -> result<void>;
+};
+
+struct shm_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_create_pool(object_id pool, handle_t fd, i32 size) -> result<void>;
+    [[nodiscard]] auto request_release() -> result<void>;
+};
+
+struct surface_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    object_id buffer = 0;
+    object_id opaque_region = 0;
+    object_id input_region = 0;
+    i32 offset_x = 0;
+    i32 offset_y = 0;
+    i32 buffer_scale = 1;
+    i32 buffer_transform = 0;
+    std::vector<base::recti> damage;
+    std::vector<object_id> frame_callbacks;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_attach(object_id buffer, i32 x, i32 y) -> result<void>;
+    [[nodiscard]] auto request_damage(i32 x, i32 y, i32 width, i32 height) -> result<void>;
+    [[nodiscard]] auto request_frame(object_id callback) -> result<void>;
+    [[nodiscard]] auto request_set_opaque_region(object_id region) -> result<void>;
+    [[nodiscard]] auto request_set_input_region(object_id region) -> result<void>;
+    [[nodiscard]] auto request_commit() -> result<void>;
+    [[nodiscard]] auto request_set_buffer_transform(i32 transform) -> result<void>;
+    [[nodiscard]] auto request_set_buffer_scale(i32 scale) -> result<void>;
+    [[nodiscard]] auto request_damage_buffer(i32 x, i32 y, i32 width, i32 height) -> result<void>;
+    [[nodiscard]] auto request_offset(i32 x, i32 y) -> result<void>;
+    [[nodiscard]] auto request_get_release(object_id callback) -> result<void>;
+};
+
+class core_protocol {
+  public:
+    explicit core_protocol(display_service& service) noexcept;
+
+    [[nodiscard]] auto bind_global(std::string_view interface, object_id id, u32 version)
+        -> result<void>;
+
+    [[nodiscard]] auto create_surface(object_id id) -> result<void>;
+    [[nodiscard]] auto create_region(object_id id) -> result<void>;
+    [[nodiscard]] auto create_pool(object_id id, handle_t fd, i32 size) -> result<void>;
+    [[nodiscard]] auto create_buffer(object_id id, object_id pool, i32 offset, i32 width,
+                                     i32 height, i32 stride, u32 format) -> result<void>;
+
+    [[nodiscard]] auto surface(object_id id) noexcept -> surface_object*;
+
+    [[nodiscard]] auto service() noexcept -> display_service&;
+
+  private:
+    [[nodiscard]] auto send_shm_formats(object_id id) -> result<void>;
+
+    template <typename T>
+    auto store(std::vector<std::unique_ptr<T>>& objects, T object) -> T* {
+        auto held = std::make_unique<T>(std::move(object));
+        T* pointer = held.get();
+        objects.push_back(std::move(held));
+        return pointer;
+    }
+
+    display_service* service_;
+    std::vector<std::unique_ptr<compositor_object>> compositors_;
+    std::vector<std::unique_ptr<region_object>> regions_;
+    std::vector<std::unique_ptr<buffer_object>> buffers_;
+    std::vector<std::unique_ptr<shm_pool_object>> pools_;
+    std::vector<std::unique_ptr<shm_object>> shms_;
+    std::vector<std::unique_ptr<surface_object>> surfaces_;
+};
+
+}

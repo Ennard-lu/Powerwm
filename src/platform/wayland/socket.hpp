@@ -32,6 +32,7 @@ class stream {
 
     stream(stream&& other) noexcept;
     auto operator=(stream&& other) noexcept -> stream&;
+    ~stream() noexcept;
 
     [[nodiscard]] auto valid() const noexcept -> bool;
 
@@ -64,6 +65,7 @@ class listener {
 
     listener(listener&& other) noexcept;
     auto operator=(listener&& other) noexcept -> listener&;
+    ~listener() noexcept;
 
     [[nodiscard]] static auto create(std::string_view path) noexcept -> result<listener>;
 

@@ -118,7 +118,10 @@ messages from the byte stream and routes them through the object table.
 
 - `wl_display.sync` → `wl_callback.done` plus `wl_display.delete_id`;
 - `wl_display.get_registry` → `wl_registry.global` for registered globals;
-- `wl_registry.bind` is wired through reflection but global implementations are next.
+- `wl_registry.bind` creates compositor/shm objects through reflection dispatch;
+- `wl_compositor`, `wl_region`, `wl_surface`, `wl_shm`, `wl_shm_pool`, and `wl_buffer`
+  track protocol state, damage, commit, and frame callbacks;
+- surface buffers are tracked but not yet sampled by the renderer.
 
 Client-id lifetime, compositor/surface objects, coroutine sessions, and real external
 clients are the next Phase 3 steps.

@@ -342,6 +342,166 @@ auto test_socket_transport() -> bool {
     return offset == input.size() && messages == 5 && saw_global && saw_callback && saw_delete;
 }
 
+auto test_core_objects() -> bool {
+    namespace transport = pwm::platform::wayland;
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-core.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    const u32 compositor_global = display.add_global("wl_compositor", 4);
+    const u32 shm_global = display.add_global("wl_shm", 1);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(compositor_global));
+    static_cast<void>(requests.write_string("wl_compositor"));
+    static_cast<void>(requests.write_u32(4));
+    static_cast<void>(requests.write_new_id(5));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(shm_global));
+    static_cast<void>(requests.write_string("wl_shm"));
+    static_cast<void>(requests.write_u32(1));
+    static_cast<void>(requests.write_new_id(6));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(5, 0));
+    static_cast<void>(requests.write_new_id(7));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(5, 1));
+    static_cast<void>(requests.write_new_id(8));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(8, 1));
+    static_cast<void>(requests.write_i32(0));
+    static_cast<void>(requests.write_i32(0));
+    static_cast<void>(requests.write_i32(100));
+    static_cast<void>(requests.write_i32(100));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(7, 1));
+    static_cast<void>(requests.write_object(0));
+    static_cast<void>(requests.write_i32(0));
+    static_cast<void>(requests.write_i32(0));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(7, 2));
+    static_cast<void>(requests.write_i32(0));
+    static_cast<void>(requests.write_i32(0));
+    static_cast<void>(requests.write_i32(100));
+    static_cast<void>(requests.write_i32(100));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(7, 3));
+    static_cast<void>(requests.write_new_id(9));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(7, 6));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(7, 0));
+    static_cast<void>(requests.end_message());
+
+    auto sent = client.send(requests.bytes(), {});
+    if (!sent || sent->bytes != requests.bytes().size()) {
+        return false;
+    }
+    if (!server.receive_available()) {
+        std::println(stderr, "core receive failed");
+        return false;
+    }
+    auto dispatched = server.dispatch_available();
+    if (!dispatched) {
+        std::println(stderr, "core dispatch failed: {}", dispatched.error().message);
+        return false;
+    }
+    if (*dispatched != 11) {
+        std::println(stderr, "core dispatch count {}", *dispatched);
+        return false;
+    }
+    if (!server.flush()) {
+        return false;
+    }
+
+    std::array<std::byte, 4096> received{};
+    std::vector<std::byte> input;
+    for (pwm::i32 attempt = 0; attempt < 100; ++attempt) {
+        auto result = client.receive(received, std::span<pwm::handle_t>{});
+        if (!result) {
+            return false;
+        }
+        input.insert(input.end(), received.begin(), received.begin() + result->bytes);
+        if (result->would_block || result->closed || !input.empty()) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+
+    pwm::usize offset = 0;
+    pwm::u32 globals = 0;
+    pwm::u32 formats = 0;
+    bool saw_callback = false;
+    bool saw_callback_delete = false;
+    bool saw_surface_delete = false;
+    while (offset + sizeof(wayland::message_header) <= input.size()) {
+        auto header = wayland::decode_header(std::span<const std::byte>{input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == 2 && header->opcode == 0) {
+            auto event = generated::wl_registry::event_global::decode(reader);
+            if (!event) {
+                return false;
+            }
+            ++globals;
+        } else if (header->object == 6 && header->opcode == 0) {
+            auto event = generated::wl_shm::event_format::decode(reader);
+            if (!event) {
+                return false;
+            }
+            ++formats;
+        } else if (header->object == 9 && header->opcode == 0) {
+            auto event = generated::wl_callback::event_done::decode(reader);
+            if (!event) {
+                return false;
+            }
+            saw_callback = true;
+        } else if (header->object == 1 && header->opcode == 1) {
+            auto event = generated::wl_display::event_delete_id::decode(reader);
+            if (!event) {
+                return false;
+            }
+            if (std::get<0>(event->arguments) == 9) {
+                saw_callback_delete = true;
+            } else if (std::get<0>(event->arguments) == 7) {
+                saw_surface_delete = true;
+            }
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    return offset == input.size() && globals == 2 && formats == 2 && saw_callback &&
+           saw_callback_delete && saw_surface_delete && server.objects().find(7) == nullptr;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -388,6 +548,10 @@ int main() {
     }
     if (!test_xdg_shell_dispatch()) {
         std::println(stderr, "xdg-shell dispatch test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_core_objects()) {
+        std::println(stderr, "core object test failed");
         return EXIT_FAILURE;
     }
     if (!test_socket_transport()) {

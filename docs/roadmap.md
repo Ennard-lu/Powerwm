@@ -158,8 +158,10 @@ libwayland.
 - [x] Unix socket transport, incremental message buffering, and partial writes;
 - [x] `SCM_RIGHTS` fd transport in the socket wrapper;
 - [x] basic `wl_display` sync/delete_id and `wl_registry` global/registry handling;
+- [x] `wl_compositor`, `wl_region`, `wl_surface`, `wl_shm`, `wl_shm_pool`, `wl_buffer`
+  server objects with surface state and commit/frame callbacks;
+- [ ] surface buffer rendering, xdg-shell, seat, and output objects;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
-- [ ] `wl_compositor`, `wl_surface`, `wl_shm`, `xdg_shell`, seat, and output objects;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [ ] real external client handshake and wire fuzzing.
 

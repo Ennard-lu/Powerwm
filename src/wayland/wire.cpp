@@ -93,6 +93,9 @@ auto protocol_reader::read_string() noexcept -> result<std::string_view> {
     if (bytes->back() != std::byte{0}) {
         return std::unexpected(protocol_error("string argument is not NUL terminated"));
     }
+    if (!align_to_four()) {
+        return std::unexpected(protocol_error("string argument padding is truncated"));
+    }
     const auto text =
         std::span<const char>{reinterpret_cast<const char*>(bytes->data()), bytes->size() - 1};
     return std::string_view{text.data(), text.size()};

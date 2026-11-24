@@ -9,16 +9,8 @@
 
 namespace pwm::wayland {
 
-namespace {
-
-auto queue_event(connection& target, const protocol_writer& writer) -> result<void> {
-    return target.queue_message(writer);
-}
-
-}
-
 display_service::display_service(connection& connection) noexcept
-    : connection_(&connection), display_{this} {
+    : connection_(&connection), display_{this}, core_{*this} {
 }
 
 auto display_service::start() -> result<void> {
@@ -39,6 +31,27 @@ auto display_service::globals() const noexcept -> const std::vector<registry_glo
     return globals_;
 }
 
+auto display_service::connection_ref() noexcept -> connection& {
+    return *connection_;
+}
+
+auto display_service::queue_event(const protocol_writer& writer) -> result<void> {
+    return connection_->queue_message(writer);
+}
+
+auto display_service::destroy_object(object_id id) -> result<void> {
+    if (!connection_->objects().remove(id)) {
+        return std::unexpected(
+            make_error(error_code::protocol, "destroy references an unknown object"));
+    }
+    return send_delete_id(id);
+}
+
+auto display_service::bind_global(std::string_view interface, object_id id, u32 version)
+    -> result<void> {
+    return core_.bind_global(interface, id, version);
+}
+
 auto display_service::next_serial() noexcept -> u32 {
     return ++next_serial_;
 }
@@ -55,7 +68,7 @@ auto display_service::send_registry_globals(object_id registry) -> result<void> 
             !encoded) {
             return std::unexpected(encoded.error());
         }
-        if (auto queued = queue_event(*connection_, writer); !queued) {
+        if (auto queued = queue_event(writer); !queued) {
             return std::unexpected(queued.error());
         }
     }
@@ -66,24 +79,27 @@ auto display_service::send_callback_done(object_id callback, u32 data) -> result
     generated::wl_callback::event_done done{};
     std::get<0>(done.arguments) = data;
 
-    protocol_writer done_writer;
-    if (auto encoded = generated::wl_callback::event_done::encode(done_writer, callback, done);
+    protocol_writer writer;
+    if (auto encoded = generated::wl_callback::event_done::encode(writer, callback, done);
         !encoded) {
         return std::unexpected(encoded.error());
     }
-    if (auto queued = queue_event(*connection_, done_writer); !queued) {
+    if (auto queued = queue_event(writer); !queued) {
         return std::unexpected(queued.error());
     }
+    return send_delete_id(callback);
+}
 
+auto display_service::send_delete_id(object_id id) -> result<void> {
     generated::wl_display::event_delete_id deleted{};
-    std::get<0>(deleted.arguments) = callback;
+    std::get<0>(deleted.arguments) = id;
 
-    protocol_writer delete_writer;
-    if (auto encoded = generated::wl_display::event_delete_id::encode(delete_writer, 1, deleted);
+    protocol_writer writer;
+    if (auto encoded = generated::wl_display::event_delete_id::encode(writer, 1, deleted);
         !encoded) {
         return std::unexpected(encoded.error());
     }
-    return queue_event(*connection_, delete_writer);
+    return queue_event(writer);
 }
 
 auto display_object::request_sync(object_id callback) -> result<void> {
@@ -103,12 +119,9 @@ auto display_object::request_get_registry(object_id registry) -> result<void> {
 
 auto registry_object::request_bind(u32 name, std::string_view interface, u32 version,
                                    object_id new_id) -> result<void> {
-    static_cast<void>(new_id);
-    static_cast<void>(version);
     for (const auto& global : service->globals_) {
         if (global.name == name && global.interface == interface) {
-            return std::unexpected(
-                make_error(error_code::unsupported, "global binding is not implemented"));
+            return service->bind_global(interface, new_id, version);
         }
     }
     return std::unexpected(

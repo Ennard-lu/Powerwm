@@ -20,6 +20,7 @@ class connection {
 
     connection(connection&&) noexcept = default;
     auto operator=(connection&&) noexcept -> connection& = default;
+    ~connection() noexcept;
 
     explicit connection(platform::wayland::stream stream) noexcept;
 

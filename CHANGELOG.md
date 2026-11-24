@@ -49,6 +49,8 @@ pre-1.0 `0.x.y` convention.
 - Phase 3 transport: nonblocking Unix sockets, `SCM_RIGHTS` fd passing, incremental
   reads and partial writes, connection framing, and basic `wl_display`/`wl_registry`
   server objects.
+- Phase 3 core objects: `wl_compositor`, `wl_region`, `wl_surface`, `wl_shm`,
+  `wl_shm_pool`, and `wl_buffer` with damage, commit, and frame callback handling.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
   `powerwm_input_probe`, `powerwm_seat_probe`, `powerwm_vulkan_pipeline_probe`.
 

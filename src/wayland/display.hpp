@@ -4,6 +4,7 @@
 
 #include <base/result.hpp>
 #include <wayland/connection.hpp>
+#include <wayland/core.hpp>
 #include <wayland/object_table.hpp>
 
 #include <memory>
@@ -50,14 +51,26 @@ class display_service {
 
     [[nodiscard]] auto send_registry_globals(object_id registry) -> result<void>;
 
+    [[nodiscard]] auto connection_ref() noexcept -> connection&;
+
+    [[nodiscard]] auto queue_event(const protocol_writer& writer) -> result<void>;
+
+    [[nodiscard]] auto destroy_object(object_id id) -> result<void>;
+
+    [[nodiscard]] auto bind_global(std::string_view interface, object_id id, u32 version)
+        -> result<void>;
+
+    [[nodiscard]] auto send_callback_done(object_id callback, u32 data) -> result<void>;
+
   private:
     friend struct display_object;
     friend struct registry_object;
 
-    [[nodiscard]] auto send_callback_done(object_id callback, u32 data) -> result<void>;
+    [[nodiscard]] auto send_delete_id(object_id id) -> result<void>;
 
     connection* connection_;
     display_object display_;
+    core_protocol core_;
     std::vector<std::unique_ptr<registry_object>> registries_;
     std::vector<registry_global> globals_;
     u32 next_global_name_ = 1;

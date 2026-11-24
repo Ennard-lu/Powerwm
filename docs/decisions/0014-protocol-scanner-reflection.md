@@ -31,7 +31,10 @@ generated interface descriptor provides the protocol message names and opcodes.
 8. `wayland::object_table` maps object ids to generated interface versions and a
    type-erased reflected dispatcher.
 9. Unix socket ownership and `SCM_RIGHTS` live in `platform/wayland`; `wayland::connection`
-   owns incremental input/output buffers and framing. Coroutine sessions remain separate.
+   owns incremental input/output buffers and framing.
+10. Core server objects (`wl_compositor`, `wl_region`, `wl_surface`, `wl_shm`,
+    `wl_shm_pool`, `wl_buffer`) track protocol state and are dispatched through the same
+    reflected tables. Buffer rendering is a separate renderer integration step.
 
 ## Consequences
 

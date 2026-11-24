@@ -51,6 +51,7 @@ Working today:
 - wire message reader/writer and reflection-based request dispatch
 - Unix socket transport, incremental framing, `SCM_RIGHTS`, and basic `wl_display`/
   `wl_registry` handling
+- compositor, region, surface, shm pool, and buffer protocol state with frame callbacks
 
 Still ahead:
 

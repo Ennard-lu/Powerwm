@@ -18,6 +18,10 @@ constexpr usize receive_fd_capacity = 64;
 connection::connection(platform::wayland::stream stream) noexcept : stream_(std::move(stream)) {
 }
 
+connection::~connection() noexcept {
+    disconnect();
+}
+
 auto connection::valid() const noexcept -> bool {
     return stream_.valid();
 }
