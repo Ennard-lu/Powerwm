@@ -10,7 +10,7 @@
 namespace pwm::wayland {
 
 display_service::display_service(connection& connection) noexcept
-    : connection_(&connection), display_{this}, core_{*this} {
+    : connection_(&connection), display_{this}, core_{*this}, xdg_{*this} {
 }
 
 auto display_service::start() -> result<void> {
@@ -49,6 +49,9 @@ auto display_service::destroy_object(object_id id) -> result<void> {
 
 auto display_service::bind_global(std::string_view interface, object_id id, u32 version)
     -> result<void> {
+    if (interface == "xdg_wm_base") {
+        return xdg_.bind_global(interface, id, version);
+    }
     return core_.bind_global(interface, id, version);
 }
 

@@ -160,7 +160,9 @@ libwayland.
 - [x] basic `wl_display` sync/delete_id and `wl_registry` global/registry handling;
 - [x] `wl_compositor`, `wl_region`, `wl_surface`, `wl_shm`, `wl_shm_pool`, `wl_buffer`
   server objects with surface state and commit/frame callbacks;
-- [ ] surface buffer rendering, xdg-shell, seat, and output objects;
+- [x] basic `xdg_wm_base`, `xdg_positioner`, `xdg_surface`, `xdg_toplevel`, and
+  `xdg_popup` state with configure/ack_configure;
+- [ ] surface buffer rendering, seat, and output objects;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [ ] real external client handshake and wire fuzzing.

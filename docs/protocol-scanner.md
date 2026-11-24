@@ -121,6 +121,8 @@ messages from the byte stream and routes them through the object table.
 - `wl_registry.bind` creates compositor/shm objects through reflection dispatch;
 - `wl_compositor`, `wl_region`, `wl_surface`, `wl_shm`, `wl_shm_pool`, and `wl_buffer`
   track protocol state, damage, commit, and frame callbacks;
+- `xdg_wm_base`, `xdg_positioner`, `xdg_surface`, `xdg_toplevel`, and `xdg_popup`
+  track role state, titles, app ids, geometry, configure serials, and popup events;
 - surface buffers are tracked but not yet sampled by the renderer.
 
 Client-id lifetime, compositor/surface objects, coroutine sessions, and real external

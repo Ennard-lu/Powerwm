@@ -51,6 +51,8 @@ pre-1.0 `0.x.y` convention.
   server objects.
 - Phase 3 core objects: `wl_compositor`, `wl_region`, `wl_surface`, `wl_shm`,
   `wl_shm_pool`, and `wl_buffer` with damage, commit, and frame callback handling.
+- Phase 3 xdg-shell: `xdg_wm_base`, `xdg_positioner`, `xdg_surface`, `xdg_toplevel`,
+  and `xdg_popup` state, configure/acknowledge flow, role metadata, and transport test.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
   `powerwm_input_probe`, `powerwm_seat_probe`, `powerwm_vulkan_pipeline_probe`.
 

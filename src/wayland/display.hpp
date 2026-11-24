@@ -6,6 +6,7 @@
 #include <wayland/connection.hpp>
 #include <wayland/core.hpp>
 #include <wayland/object_table.hpp>
+#include <wayland/xdg_shell.hpp>
 
 #include <memory>
 #include <string>
@@ -71,6 +72,7 @@ class display_service {
     connection* connection_;
     display_object display_;
     core_protocol core_;
+    xdg_shell_protocol xdg_;
     std::vector<std::unique_ptr<registry_object>> registries_;
     std::vector<registry_global> globals_;
     u32 next_global_name_ = 1;

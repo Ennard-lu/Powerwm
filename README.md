@@ -52,6 +52,7 @@ Working today:
 - Unix socket transport, incremental framing, `SCM_RIGHTS`, and basic `wl_display`/
   `wl_registry` handling
 - compositor, region, surface, shm pool, and buffer protocol state with frame callbacks
+- xdg-shell role state, configure/acknowledge handshake, and popup events
 
 Still ahead:
 

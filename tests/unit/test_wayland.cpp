@@ -502,6 +502,197 @@ auto test_core_objects() -> bool {
            saw_callback_delete && saw_surface_delete && server.objects().find(7) == nullptr;
 }
 
+auto test_xdg_shell_transport() -> bool {
+    namespace transport = pwm::platform::wayland;
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-xdg.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    const u32 compositor_global = display.add_global("wl_compositor", 4);
+    const u32 xdg_global = display.add_global("xdg_wm_base", 1);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(compositor_global));
+    static_cast<void>(requests.write_string("wl_compositor"));
+    static_cast<void>(requests.write_u32(4));
+    static_cast<void>(requests.write_new_id(3));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(xdg_global));
+    static_cast<void>(requests.write_string("xdg_wm_base"));
+    static_cast<void>(requests.write_u32(1));
+    static_cast<void>(requests.write_new_id(4));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(3, 0));
+    static_cast<void>(requests.write_new_id(5));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 2));
+    static_cast<void>(requests.write_new_id(6));
+    static_cast<void>(requests.write_object(5));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 1));
+    static_cast<void>(requests.write_new_id(7));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(6, 1));
+    static_cast<void>(requests.write_new_id(8));
+    static_cast<void>(requests.end_message());
+
+    auto sent = client.send(requests.bytes(), {});
+    if (!sent || sent->bytes != requests.bytes().size()) {
+        return false;
+    }
+    if (!server.receive_available()) {
+        return false;
+    }
+    auto dispatched = server.dispatch_available();
+    if (!dispatched || *dispatched != 7) {
+        return false;
+    }
+    if (!server.flush()) {
+        return false;
+    }
+
+    std::array<std::byte, 4096> received{};
+    std::vector<std::byte> input;
+    for (pwm::i32 attempt = 0; attempt < 100; ++attempt) {
+        auto result = client.receive(received, std::span<pwm::handle_t>{});
+        if (!result) {
+            return false;
+        }
+        input.insert(input.end(), received.begin(), received.begin() + result->bytes);
+        if (result->would_block || result->closed || !input.empty()) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+
+    u32 configure_serial = 0;
+    bool saw_toplevel_configure = false;
+    pwm::usize offset = 0;
+    while (offset + sizeof(wayland::message_header) <= input.size()) {
+        auto header = wayland::decode_header(std::span<const std::byte>{input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == 8 && header->opcode == 0) {
+            auto event = generated::xdg_toplevel::event_configure::decode(reader);
+            if (!event) {
+                return false;
+            }
+            saw_toplevel_configure = true;
+        } else if (header->object == 6 && header->opcode == 0) {
+            auto event = generated::xdg_surface::event_configure::decode(reader);
+            if (!event) {
+                return false;
+            }
+            configure_serial = std::get<0>(event->arguments);
+        } else if (header->object == 2 && header->opcode == 0) {
+            if (!generated::wl_registry::event_global::decode(reader)) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    if (!saw_toplevel_configure || configure_serial == 0) {
+        return false;
+    }
+
+    wayland::protocol_writer second;
+    static_cast<void>(second.begin_message(6, 4));
+    static_cast<void>(second.write_u32(configure_serial));
+    static_cast<void>(second.end_message());
+    static_cast<void>(second.begin_message(8, 2));
+    static_cast<void>(second.write_string("powerwm"));
+    static_cast<void>(second.end_message());
+    static_cast<void>(second.begin_message(8, 3));
+    static_cast<void>(second.write_string("powerwm.test"));
+    static_cast<void>(second.end_message());
+    static_cast<void>(second.begin_message(8, 0));
+    static_cast<void>(second.end_message());
+    static_cast<void>(second.begin_message(6, 0));
+    static_cast<void>(second.end_message());
+    static_cast<void>(second.begin_message(7, 0));
+    static_cast<void>(second.end_message());
+    static_cast<void>(second.begin_message(4, 0));
+    static_cast<void>(second.end_message());
+    static_cast<void>(second.begin_message(5, 0));
+    static_cast<void>(second.end_message());
+
+    auto second_sent = client.send(second.bytes(), {});
+    if (!second_sent || second_sent->bytes != second.bytes().size()) {
+        return false;
+    }
+    if (!server.receive_available()) {
+        return false;
+    }
+    auto second_dispatched = server.dispatch_available();
+    if (!second_dispatched || *second_dispatched != 8) {
+        return false;
+    }
+    if (!server.flush()) {
+        return false;
+    }
+
+    std::vector<std::byte> deletes;
+    for (pwm::i32 attempt = 0; attempt < 100; ++attempt) {
+        auto result = client.receive(received, std::span<pwm::handle_t>{});
+        if (!result) {
+            return false;
+        }
+        deletes.insert(deletes.end(), received.begin(), received.begin() + result->bytes);
+        if (result->would_block || result->closed || !deletes.empty()) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+
+    pwm::u32 delete_count = 0;
+    offset = 0;
+    while (offset + sizeof(wayland::message_header) <= deletes.size()) {
+        auto header = wayland::decode_header(std::span<const std::byte>{deletes}.subspan(offset));
+        if (!header || header->object != 1 || header->opcode != 1) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{deletes}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (!generated::wl_display::event_delete_id::decode(reader)) {
+            return false;
+        }
+        offset += header->size;
+        ++delete_count;
+    }
+    return delete_count == 5 && server.objects().find(8) == nullptr;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -552,6 +743,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_xdg_shell_transport()) {
+        std::println(stderr, "xdg-shell transport test failed");
         return EXIT_FAILURE;
     }
     if (!test_socket_transport()) {

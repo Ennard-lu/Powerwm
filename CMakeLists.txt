@@ -117,6 +117,7 @@ add_library(powerwm_wayland STATIC
     src/wayland/display.cpp
     src/wayland/object_table.cpp
     src/wayland/wire.cpp
+    src/wayland/xdg_shell.cpp
     "${POWERWM_GENERATED_PROTOCOL_DIR}/wayland_bindings.cpp"
     "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.cpp"
 )
