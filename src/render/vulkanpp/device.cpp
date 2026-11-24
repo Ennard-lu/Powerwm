@@ -85,7 +85,7 @@ auto device::create(const instance& instance) noexcept -> result<device> {
             .driver_version = properties.driverVersion,
             .queue_family_index = queue_family,
         };
-        return device{handle, queue, std::move(info)};
+        return device{handle, queue, physical_device, std::move(info)};
     }
 
     return std::unexpected(make_error(error_code::not_found, "no usable Vulkan device"));
@@ -111,10 +111,26 @@ auto device::queue_family_index() const noexcept -> u32 {
     return info_.queue_family_index;
 }
 
+auto device::find_memory_type(u32 type_bits, u32 required_flags) const noexcept -> result<u32> {
+    VkPhysicalDeviceMemoryProperties properties{};
+    vkGetPhysicalDeviceMemoryProperties(reinterpret_cast<VkPhysicalDevice>(physical_), &properties);
+
+    for (u32 index = 0; index < properties.memoryTypeCount; ++index) {
+        if ((type_bits & (1U << index)) == 0) {
+            continue;
+        }
+        if ((properties.memoryTypes[index].propertyFlags & required_flags) == required_flags) {
+            return index;
+        }
+    }
+    return std::unexpected(make_error(error_code::not_found, "no suitable memory type"));
+}
+
 auto device::destroy() const noexcept -> void {
     vkDestroyDevice(reinterpret_cast<VkDevice>(handle_), nullptr);
     handle_ = nullptr;
     queue_ = nullptr;
+    physical_ = nullptr;
 }
 
 }

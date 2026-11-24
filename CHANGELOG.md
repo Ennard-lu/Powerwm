@@ -29,6 +29,7 @@
 - TTY3 硬件验证：1200 帧 page flip 动画、10 次 VT 来回切换通过；修复 libdrm 属性计数返回值、page flip 回调上下文、周期 timerfd、seat master 恢复与热插拔事件过滤。
 - Phase 2 起步：`vulkanpp` Instance/Device/Queue RAII 与 `powerwm_vulkan_probe`。
 - `vulkanpp` command pool / command buffer / fence / queue submit，并在探针中完成空命令提交。
+- `vulkanpp` image / readback buffer / offscreen clear+readback；探针验证 RGBA clear 像素。
 - ADR-0013：C API 封装假定对象合法，移除封装层 null/valid 防护；`raii` 不再检查 `valid()`。
 - 依赖 DRM device 的资源改由 `device::create_*` 创建；统一使用 `auto foo() -> T` 函数声明风格。
 - 英文 README；中文 README 移至 `docs/README.zh-CN.md`。

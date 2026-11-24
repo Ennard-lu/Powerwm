@@ -6,6 +6,7 @@
 #include <render/vulkanpp/device.hpp>
 #include <render/vulkanpp/fence.hpp>
 #include <render/vulkanpp/instance.hpp>
+#include <render/vulkanpp/offscreen.hpp>
 
 #include <cstdlib>
 #include <print>
@@ -59,6 +60,12 @@ auto run_probe() -> int {
     require_value(vk::submit(device.value(), command_buffer.value(), fence.value()));
     require_value(fence->wait(1000000000));
     std::println("vulkan queue submit ok");
+
+    auto target = pwm::raii{require_value(vk::create_offscreen_target(device.value(), 8, 8))};
+    require_value(target->render({.red = 0.25F, .green = 0.5F, .blue = 0.75F, .alpha = 1.0F}));
+    const vk::color pixel = require_value(target->read_pixel(0, 0));
+    std::println("clear pixel r={:.2f} g={:.2f} b={:.2f} a={:.2f}", pixel.red, pixel.green,
+                 pixel.blue, pixel.alpha);
 
     return EXIT_SUCCESS;
 }

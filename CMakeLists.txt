@@ -61,6 +61,8 @@ add_library(powerwm_vulkanpp STATIC
     src/render/vulkanpp/device.cpp
     src/render/vulkanpp/fence.cpp
     src/render/vulkanpp/command_pool.cpp
+    src/render/vulkanpp/image.cpp
+    src/render/vulkanpp/offscreen.cpp
 )
 target_link_libraries(powerwm_vulkanpp PUBLIC
     powerwm_core
