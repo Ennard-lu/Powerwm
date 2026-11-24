@@ -49,6 +49,8 @@ Working today:
 - headless output and diagnostics for DRM outputs and Vulkan devices
 - in-tree XML protocol scanner generating Wayland core and xdg-shell bindings
 - wire message reader/writer and reflection-based request dispatch
+- Unix socket transport, incremental framing, `SCM_RIGHTS`, and basic `wl_display`/
+  `wl_registry` handling
 
 Still ahead:
 

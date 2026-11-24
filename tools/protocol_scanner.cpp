@@ -135,7 +135,7 @@ auto argument_type(const wayland::protocol_argument& argument) -> std::string {
         return "object_id";
     }
     if (argument.type == "new_id") {
-        return argument.interface.empty() ? "untyped_new_id" : "object_id";
+        return "object_id";
     }
     if (argument.type == "fd") {
         return "handle_t";
@@ -163,7 +163,7 @@ auto decode_method(const wayland::protocol_argument& argument) -> std::string {
         return "read_object";
     }
     if (argument.type == "new_id") {
-        return argument.interface.empty() ? "read_untyped_new_id" : "read_new_id";
+        return "read_new_id";
     }
     if (argument.type == "fd") {
         return "read_fd";
@@ -191,7 +191,7 @@ auto encode_method(const wayland::protocol_argument& argument) -> std::string {
         return "write_object";
     }
     if (argument.type == "new_id") {
-        return argument.interface.empty() ? "write_untyped_new_id" : "write_new_id";
+        return "write_new_id";
     }
     if (argument.type == "fd") {
         return "write_fd";
@@ -199,20 +199,42 @@ auto encode_method(const wayland::protocol_argument& argument) -> std::string {
     return "write_u32";
 }
 
+struct wire_field {
+    std::string type;
+    std::string decode;
+    std::string encode;
+};
+
+auto wire_fields(const wayland::protocol_message& message) -> std::vector<wire_field> {
+    std::vector<wire_field> fields;
+    for (const auto& argument : message.arguments) {
+        if (argument.type == "new_id" && argument.interface.empty()) {
+            fields.push_back({"std::string_view", "read_string", "write_string"});
+            fields.push_back({"u32", "read_u32", "write_u32"});
+            fields.push_back({"object_id", "read_new_id", "write_new_id"});
+            continue;
+        }
+        fields.push_back(
+            {argument_type(argument), decode_method(argument), encode_method(argument)});
+    }
+    return fields;
+}
+
 auto message_struct_name(std::string_view kind, std::string_view name) -> std::string {
     return std::string{kind} + "_" + sanitize(name);
 }
 
 auto arguments_tuple(const wayland::protocol_message& message) -> std::string {
-    if (message.arguments.empty()) {
+    const auto fields = wire_fields(message);
+    if (fields.empty()) {
         return "std::tuple<>";
     }
     std::string result = "std::tuple<";
-    for (pwm::usize index = 0; index < message.arguments.size(); ++index) {
+    for (pwm::usize index = 0; index < fields.size(); ++index) {
         if (index != 0) {
             result += ", ";
         }
-        result += argument_type(message.arguments[index]);
+        result += fields[index].type;
     }
     result += ">";
     return result;
@@ -325,9 +347,9 @@ auto write_decode(std::ofstream& output, const wayland::protocol_interface& inte
     output << "auto " << interface_name << "::" << message_name
            << "::decode(protocol_reader& reader) -> result<" << message_name << "> {\n";
     output << "    " << message_name << " message{};\n";
-    for (pwm::usize index = 0; index < message.arguments.size(); ++index) {
-        output << "    auto argument" << index << " = reader."
-               << decode_method(message.arguments[index]) << "();\n";
+    const auto fields = wire_fields(message);
+    for (pwm::usize index = 0; index < fields.size(); ++index) {
+        output << "    auto argument" << index << " = reader." << fields[index].decode << "();\n";
         output << "    if (!argument" << index << ") {\n";
         output << "        return std::unexpected(argument" << index << ".error());\n";
         output << "    }\n";
@@ -347,16 +369,10 @@ auto write_encode(std::ofstream& output, const wayland::protocol_interface& inte
     output << "    if (auto begun = writer.begin_message(object, opcode); !begun) {\n";
     output << "        return std::unexpected(begun.error());\n";
     output << "    }\n";
-    for (pwm::usize index = 0; index < message.arguments.size(); ++index) {
-        const auto& argument = message.arguments[index];
-        if (argument.type == "new_id" && argument.interface.empty()) {
-            output << "    if (auto written = writer.write_untyped_new_id(std::get<" << index
-                   << ">(message.arguments).id, std::get<" << index
-                   << ">(message.arguments).interface); !written) {\n";
-        } else {
-            output << "    if (auto written = writer." << encode_method(argument) << "(std::get<"
-                   << index << ">(message.arguments)); !written) {\n";
-        }
+    const auto fields = wire_fields(message);
+    for (pwm::usize index = 0; index < fields.size(); ++index) {
+        output << "    if (auto written = writer." << fields[index].encode << "(std::get<" << index
+               << ">(message.arguments)); !written) {\n";
         output << "        return std::unexpected(written.error());\n";
         output << "    }\n";
     }

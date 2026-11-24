@@ -29,8 +29,9 @@ generated interface descriptor provides the protocol message names and opcodes.
    protocol error.
 7. The wire layer owns message headers, argument encoding, alignment, and fd lists.
 8. `wayland::object_table` maps object ids to generated interface versions and a
-   type-erased reflected dispatcher. Socket ownership, SCM_RIGHTS, and coroutine
-   sessions remain separate.
+   type-erased reflected dispatcher.
+9. Unix socket ownership and `SCM_RIGHTS` live in `platform/wayland`; `wayland::connection`
+   owns incremental input/output buffers and framing. Coroutine sessions remain separate.
 
 ## Consequences
 

@@ -2,18 +2,25 @@
 
 #include <base/result.hpp>
 #include <base/types.hpp>
+#include <platform/wayland/socket.hpp>
+#include <wayland/connection.hpp>
 #include <wayland/dispatch.hpp>
+#include <wayland/display.hpp>
 #include <wayland/object_table.hpp>
 #include <wayland/protocol.hpp>
 #include <wayland/wire.hpp>
 #include <wayland/xml.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <print>
 #include <span>
 #include <string_view>
+#include <thread>
 #include <tuple>
+#include <vector>
 #include <wayland_bindings.hpp>
 #include <xdg_shell_bindings.hpp>
 
@@ -212,6 +219,129 @@ auto test_object_table() -> bool {
     return table.remove(1) && table.size() == 0;
 }
 
+auto test_socket_transport() -> bool {
+    namespace transport = pwm::platform::wayland;
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-transport.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    display.add_global("wl_demo", 1);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(1, 0));
+    static_cast<void>(requests.write_new_id(3));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(1, 0));
+    static_cast<void>(requests.write_new_id(4));
+    static_cast<void>(requests.end_message());
+    const auto encoded = requests.bytes();
+    auto partial = client.send(encoded.first(sizeof(wayland::message_header)), {});
+    if (!partial || partial->bytes != sizeof(wayland::message_header)) {
+        return false;
+    }
+    if (!server.receive_available()) {
+        return false;
+    }
+    auto incomplete = server.dispatch_available();
+    if (!incomplete || *incomplete != 0) {
+        return false;
+    }
+
+    auto sent = client.send(encoded.subspan(sizeof(wayland::message_header)), {});
+    if (!sent || sent->bytes != encoded.size() - sizeof(wayland::message_header)) {
+        return false;
+    }
+    if (!server.receive_available()) {
+        return false;
+    }
+    auto dispatched = server.dispatch_available();
+    if (!dispatched || *dispatched != 3) {
+        return false;
+    }
+    if (!server.flush()) {
+        return false;
+    }
+
+    std::array<std::byte, 4096> received{};
+    std::vector<std::byte> input;
+    for (pwm::i32 attempt = 0; attempt < 100; ++attempt) {
+        auto result = client.receive(received, std::span<pwm::handle_t>{});
+        if (!result) {
+            return false;
+        }
+        input.insert(input.end(), received.begin(), received.begin() + result->bytes);
+        if (result->would_block || result->closed || !input.empty()) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    if (input.empty()) {
+        return false;
+    }
+
+    pwm::usize offset = 0;
+    pwm::usize messages = 0;
+    bool saw_global = false;
+    bool saw_callback = false;
+    bool saw_delete = false;
+    while (offset + sizeof(wayland::message_header) <= input.size()) {
+        auto header = wayland::decode_header(std::span<const std::byte>{input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == 2 && header->opcode == 0) {
+            auto event = generated::wl_registry::event_global::decode(reader);
+            if (!event || std::get<0>(event->arguments) != 1 ||
+                std::get<1>(event->arguments) != "wl_demo" || std::get<2>(event->arguments) != 1) {
+                return false;
+            }
+            saw_global = true;
+        } else if ((header->object == 3 || header->object == 4) && header->opcode == 0) {
+            auto event = generated::wl_callback::event_done::decode(reader);
+            if (!event) {
+                return false;
+            }
+            saw_callback = true;
+        } else if (header->object == 1 && header->opcode == 1) {
+            auto event = generated::wl_display::event_delete_id::decode(reader);
+            if (!event) {
+                return false;
+            }
+            saw_delete = true;
+        } else {
+            return false;
+        }
+        offset += header->size;
+        ++messages;
+    }
+    return offset == input.size() && messages == 5 && saw_global && saw_callback && saw_delete;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -258,6 +388,10 @@ int main() {
     }
     if (!test_xdg_shell_dispatch()) {
         std::println(stderr, "xdg-shell dispatch test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_socket_transport()) {
+        std::println(stderr, "socket transport test failed");
         return EXIT_FAILURE;
     }
     if (!test_generated_descriptors()) {

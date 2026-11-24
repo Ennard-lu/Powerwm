@@ -110,5 +110,15 @@ add_object<display_implementation, generated::wl_display>(table, 1, implementati
 table.dispatch(1, opcode, reader);
 ```
 
-Socket transport, `SCM_RIGHTS`, client-id lifetime, coroutine sessions, and real-client
-compatibility are the next Phase 3 steps.
+`platform/wayland/socket.hpp` owns nonblocking Unix sockets, incremental receive
+buffers, partial sends, and `SCM_RIGHTS` fd transport. `wayland/connection.hpp` frames
+messages from the byte stream and routes them through the object table.
+
+`wayland/display.hpp` provides the first server objects:
+
+- `wl_display.sync` → `wl_callback.done` plus `wl_display.delete_id`;
+- `wl_display.get_registry` → `wl_registry.global` for registered globals;
+- `wl_registry.bind` is wired through reflection but global implementations are next.
+
+Client-id lifetime, compositor/surface objects, coroutine sessions, and real external
+clients are the next Phase 3 steps.

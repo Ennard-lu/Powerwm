@@ -45,7 +45,10 @@ pre-1.0 `0.x.y` convention.
   `xdg-shell.xml`, build-time C++ binding scanner, typed message encode/decode, wire
   header/argument reader/writer, and reflection-based request dispatch.
 - `unit.wayland`: XML parsing, wire round-trip, generated descriptors, reflected
-  handler dispatch, and object-table dispatch.
+  handler dispatch, object-table dispatch, and real socket transport.
+- Phase 3 transport: nonblocking Unix sockets, `SCM_RIGHTS` fd passing, incremental
+  reads and partial writes, connection framing, and basic `wl_display`/`wl_registry`
+  server objects.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
   `powerwm_input_probe`, `powerwm_seat_probe`, `powerwm_vulkan_pipeline_probe`.
 

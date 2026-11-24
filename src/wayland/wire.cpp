@@ -28,6 +28,10 @@ auto protocol_reader::remaining() const noexcept -> usize {
     return position_ <= data_.size() ? data_.size() - position_ : 0;
 }
 
+auto protocol_reader::consumed_fds() const noexcept -> usize {
+    return fd_position_;
+}
+
 auto protocol_reader::take(usize size) noexcept -> result<std::span<const std::byte>> {
     if (size > remaining()) {
         return std::unexpected(protocol_error("message argument is truncated"));
@@ -115,18 +119,6 @@ auto protocol_reader::read_object() noexcept -> result<object_id> {
 
 auto protocol_reader::read_new_id() noexcept -> result<object_id> {
     return read_u32();
-}
-
-auto protocol_reader::read_untyped_new_id() noexcept -> result<untyped_new_id> {
-    auto id = read_u32();
-    if (!id) {
-        return std::unexpected(id.error());
-    }
-    auto interface = read_string();
-    if (!interface) {
-        return std::unexpected(interface.error());
-    }
-    return untyped_new_id{*id, *interface};
 }
 
 auto protocol_reader::read_fd() noexcept -> result<handle_t> {
@@ -219,14 +211,6 @@ auto protocol_writer::write_object(object_id value) noexcept -> result<void> {
 
 auto protocol_writer::write_new_id(object_id value) noexcept -> result<void> {
     return write_u32(value);
-}
-
-auto protocol_writer::write_untyped_new_id(object_id value, std::string_view interface) noexcept
-    -> result<void> {
-    if (auto written = write_u32(value); !written) {
-        return written;
-    }
-    return write_string(interface);
 }
 
 auto protocol_writer::write_fd(handle_t value) noexcept -> result<void> {

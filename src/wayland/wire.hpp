@@ -22,16 +22,13 @@ struct message_header {
 
 static_assert(sizeof(message_header) == 8);
 
-struct untyped_new_id {
-    object_id id = 0;
-    std::string_view interface;
-};
-
 class protocol_reader {
   public:
     protocol_reader(std::span<const std::byte> data, std::span<const handle_t> fds = {}) noexcept;
 
     [[nodiscard]] auto remaining() const noexcept -> usize;
+
+    [[nodiscard]] auto consumed_fds() const noexcept -> usize;
 
     [[nodiscard]] auto read_u32() noexcept -> result<u32>;
     [[nodiscard]] auto read_i32() noexcept -> result<i32>;
@@ -40,7 +37,6 @@ class protocol_reader {
     [[nodiscard]] auto read_array() noexcept -> result<std::span<const std::byte>>;
     [[nodiscard]] auto read_object() noexcept -> result<object_id>;
     [[nodiscard]] auto read_new_id() noexcept -> result<object_id>;
-    [[nodiscard]] auto read_untyped_new_id() noexcept -> result<untyped_new_id>;
     [[nodiscard]] auto read_fd() noexcept -> result<handle_t>;
 
   private:

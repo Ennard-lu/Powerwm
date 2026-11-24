@@ -155,10 +155,13 @@ libwayland.
 - [x] generated core and xdg-shell bindings with typed codecs;
 - [x] C++26 reflection request dispatch;
 - [x] basic object table mapping ids to generated interfaces and reflected handlers;
-- [ ] `SCM_RIGHTS` fd passing and partial reads/writes;
+- [x] Unix socket transport, incremental message buffering, and partial writes;
+- [x] `SCM_RIGHTS` fd transport in the socket wrapper;
+- [x] basic `wl_display` sync/delete_id and `wl_registry` global/registry handling;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
+- [ ] `wl_compositor`, `wl_surface`, `wl_shm`, `xdg_shell`, seat, and output objects;
 - [ ] event loop coroutine scheduler, cancellation, timers;
-- [ ] in-tree test client and wire fuzzing.
+- [ ] real external client handshake and wire fuzzing.
 
 Exit: handshake with real libwayland clients; fd stress test; protocol errors do not
 crash; 24-hour fuzz; no `libwayland-*` in `ldd`.
