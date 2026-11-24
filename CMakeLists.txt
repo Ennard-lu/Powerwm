@@ -110,6 +110,7 @@ list(APPEND POWERWM_PROTOCOL_OUTPUTS
 add_custom_target(powerwm_protocols DEPENDS ${POWERWM_PROTOCOL_OUTPUTS})
 
 add_library(powerwm_wayland STATIC
+    src/wayland/object_table.cpp
     src/wayland/wire.cpp
     "${POWERWM_GENERATED_PROTOCOL_DIR}/wayland_bindings.cpp"
     "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_shell_bindings.cpp"

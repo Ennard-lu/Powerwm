@@ -101,5 +101,14 @@ they must outlive dispatch.
 - four-byte alignment for strings and arrays;
 - fd lists passed separately from the message payload.
 
-Socket transport, `SCM_RIGHTS`, object tables, coroutine sessions, and real-client
+`wayland/object_table.hpp` maps object ids to generated interface names/versions and
+the reflected dispatcher:
+
+```cpp
+object_table table;
+add_object<display_implementation, generated::wl_display>(table, 1, implementation);
+table.dispatch(1, opcode, reader);
+```
+
+Socket transport, `SCM_RIGHTS`, client-id lifetime, coroutine sessions, and real-client
 compatibility are the next Phase 3 steps.

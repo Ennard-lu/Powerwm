@@ -154,8 +154,9 @@ libwayland.
 - [x] XML parser and C++ descriptor generator (no `wayland-scanner`);
 - [x] generated core and xdg-shell bindings with typed codecs;
 - [x] C++26 reflection request dispatch;
+- [x] basic object table mapping ids to generated interfaces and reflected handlers;
 - [ ] `SCM_RIGHTS` fd passing and partial reads/writes;
-- [ ] object table, client IDs, interfaces, lifetime;
+- [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [ ] in-tree test client and wire fuzzing.
 

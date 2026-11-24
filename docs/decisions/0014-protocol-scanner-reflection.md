@@ -28,7 +28,9 @@ generated interface descriptor provides the protocol message names and opcodes.
 6. Missing handlers produce an `unsupported` error; malformed arguments produce a
    protocol error.
 7. The wire layer owns message headers, argument encoding, alignment, and fd lists.
-   Socket ownership, SCM_RIGHTS, object tables, and coroutine sessions remain separate.
+8. `wayland::object_table` maps object ids to generated interface versions and a
+   type-erased reflected dispatcher. Socket ownership, SCM_RIGHTS, and coroutine
+   sessions remain separate.
 
 ## Consequences
 

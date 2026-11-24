@@ -44,8 +44,8 @@ pre-1.0 `0.x.y` convention.
 - Phase 3 foundation: in-tree XML parser, protocol model, vendored `wayland.xml` and
   `xdg-shell.xml`, build-time C++ binding scanner, typed message encode/decode, wire
   header/argument reader/writer, and reflection-based request dispatch.
-- `unit.wayland`: XML parsing, wire round-trip, generated descriptors, and reflected
-  handler dispatch.
+- `unit.wayland`: XML parsing, wire round-trip, generated descriptors, reflected
+  handler dispatch, and object-table dispatch.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
   `powerwm_input_probe`, `powerwm_seat_probe`, `powerwm_vulkan_pipeline_probe`.
 

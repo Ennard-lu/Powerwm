@@ -3,6 +3,7 @@
 #include <base/result.hpp>
 #include <base/types.hpp>
 #include <wayland/dispatch.hpp>
+#include <wayland/object_table.hpp>
 #include <wayland/protocol.hpp>
 #include <wayland/wire.hpp>
 #include <wayland/xml.hpp>
@@ -42,6 +43,17 @@ struct display_implementation {
 
 struct partial_display_implementation {
     auto request_sync(u32) -> void {
+    }
+};
+
+struct wm_base_implementation {
+    object_id surface_id = 0;
+    object_id xdg_surface_id = 0;
+
+    auto request_get_xdg_surface(object_id id, object_id surface) -> pwm::result<void> {
+        xdg_surface_id = id;
+        surface_id = surface;
+        return {};
     }
 };
 
@@ -158,6 +170,48 @@ auto test_reflection_dispatch() -> bool {
     return !missing && missing.error().code == pwm::error_code::unsupported;
 }
 
+auto test_xdg_shell_dispatch() -> bool {
+    wayland::protocol_writer writer;
+    static_cast<void>(writer.begin_message(10, 2));
+    static_cast<void>(writer.write_new_id(51));
+    static_cast<void>(writer.write_object(52));
+    static_cast<void>(writer.end_message());
+
+    wayland::protocol_reader reader{writer.bytes().subspan(sizeof(wayland::message_header)),
+                                    std::span<const pwm::handle_t>{}};
+    wm_base_implementation implementation;
+    auto dispatched = wayland::dispatch_request<wm_base_implementation, generated::xdg_wm_base>(
+        implementation, 2, reader);
+    return dispatched && implementation.xdg_surface_id == 51 && implementation.surface_id == 52;
+}
+
+auto test_object_table() -> bool {
+    wayland::object_table table;
+    display_implementation implementation;
+    if (!wayland::add_object<display_implementation, generated::wl_display>(table, 1,
+                                                                            implementation)) {
+        return false;
+    }
+    if (table.size() != 1 || table.find(1) == nullptr || table.find(2) != nullptr) {
+        return false;
+    }
+
+    auto writer = make_request(1, 0, 64);
+    wayland::protocol_reader reader{writer.bytes().subspan(sizeof(wayland::message_header)),
+                                    std::span<const pwm::handle_t>{}};
+    auto dispatched = table.dispatch(1, 0, reader);
+    if (!dispatched || implementation.sync_callback != 64) {
+        return false;
+    }
+
+    wayland::protocol_reader missing_reader{std::span<const std::byte>{},
+                                            std::span<const pwm::handle_t>{}};
+    if (table.dispatch(2, 0, missing_reader)) {
+        return false;
+    }
+    return table.remove(1) && table.size() == 0;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -196,6 +250,14 @@ int main() {
     }
     if (!test_reflection_dispatch()) {
         std::println(stderr, "reflection dispatch test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_object_table()) {
+        std::println(stderr, "object table test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_xdg_shell_dispatch()) {
+        std::println(stderr, "xdg-shell dispatch test failed");
         return EXIT_FAILURE;
     }
     if (!test_generated_descriptors()) {
