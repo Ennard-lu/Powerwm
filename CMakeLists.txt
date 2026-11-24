@@ -23,6 +23,8 @@ pkg_check_modules(Libseat REQUIRED IMPORTED_TARGET libseat)
 add_library(powerwm_core STATIC
     src/base/fatal.cpp
     src/platform/drm/device.cpp
+    src/platform/event/event_fd.cpp
+    src/platform/event/event_loop.cpp
     src/platform/event/poll.cpp
     src/platform/drm/lookup.cpp
 )
@@ -69,4 +71,8 @@ if(BUILD_TESTING)
     add_executable(powerwm_tests tests/unit/test_smoke.cpp)
     target_link_libraries(powerwm_tests PRIVATE powerwm_core)
     add_test(NAME unit.smoke COMMAND powerwm_tests)
+
+    add_executable(powerwm_event_tests tests/unit/test_event_loop.cpp)
+    target_link_libraries(powerwm_event_tests PRIVATE powerwm_core)
+    add_test(NAME unit.event_loop COMMAND powerwm_event_tests)
 endif()

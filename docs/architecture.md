@@ -126,7 +126,7 @@ powerwm/
 │   ├── platform/
 │   │   ├── drm/                 # device / atomic_request / buffers / lookup
 │   │   ├── gbm/                 # 早期 GBM 封装（Vulkan 落地后评估移除）
-│   │   ├── event/               # poll 等待；epoll/timerfd/signalfd 封装
+│   │   ├── event/               # poll 事件循环、eventfd；epoll/timerfd 后续
 │   │   ├── socket/              # 目标：socket/recvmsg/sendmsg/SCM_RIGHTS
 │   │   ├── input/               # libinput + libudev 事件上下文
 │   │   ├── seat/                # libseat 会话与设备打开

@@ -41,7 +41,7 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 
 - `src/base/`：`result`、`raii`、`fatal`、定宽整数、宏等基础设施，命名空间 `pwm`。
 - `src/platform/drm/`：`libdrm` 封装（`device`、`atomic_request`、`dumb_buffer`、`framebuffer`、属性查找、page flip）。
-- `src/platform/event/`：基于 `poll` 的事件等待，用于 page flip 与输入循环。
+- `src/platform/event/`：基于 `poll` 的多 fd 事件循环、`eventfd` 封装、page flip/输入等待原语。
 - `src/platform/input/`：`libinput` + `libudev` 上下文，标准化键盘/指针/触摸事件。
 - `src/platform/seat/`：`libseat` 会话封装，设备打开与 VT enable/disable 事件；DRM 工具可用时走该路径。
 - `src/platform/gbm/`：早期 `libgbm` 封装，Vulkan 后端落地后评估移除。

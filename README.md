@@ -46,7 +46,7 @@ The repository currently contains the Phase 0 foundation and a DRM/KMS bring-up 
 - `src/base/` — `result`, `raii`, fatal handling, fixed-width integers, macros.
 - `src/platform/drm/` — libdrm wrappers: `device`, `atomic_request`, `dumb_buffer`,
   `framebuffer`, property lookup, display modes.
-- `src/platform/event/` — poll-based event waiting used by the DRM page-flip and input loops.
+- `src/platform/event/` — poll-based multi-fd event loop, `eventfd` wrapper, and page-flip/input waiting primitives.
 - `src/platform/input/` — libinput + libudev context with normalized keyboard, pointer, and touch events.
 - `src/platform/seat/` — libseat session wrapper for device access and VT enable/disable events; the DRM tool uses it when available.
 - `src/platform/gbm/` — early libgbm wrapper; will be evaluated after the Vulkan backend lands.
@@ -54,7 +54,7 @@ The repository currently contains the Phase 0 foundation and a DRM/KMS bring-up 
 - `tools/drm_bringup.cpp` — DRM/KMS double-buffered page-flip animation; uses libseat when available and pauses/resumes across VT switches.
 - `tools/input_probe.cpp` — five-second libinput event probe for keyboard, pointer, and touch input.
 - `tools/seat_probe.cpp` — five-second libseat session probe.
-- `tests/unit/` — CTest smoke tests for `result` and `raii`.
+- `tests/unit/` — CTest coverage for `result`, `raii`, and the multi-fd event loop.
 
 The Wayland protocol engine, Vulkan renderer, scene graph, and window manager are not
 implemented yet. They are tracked in the [roadmap](docs/roadmap.md).
