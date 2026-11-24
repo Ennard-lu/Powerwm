@@ -1,6 +1,6 @@
 # Phase 1 验收清单
 
-> 状态：**实现完成，硬件验收待执行**  
+> 状态：**实现完成，硬件验收进行中（TTY3 已通过 1200 帧 + 10 次 VT 切换）**  
 > 目标：确认 DRM/KMS 输出、page flip、seat/VT、输入、热插拔与 headless 路径在真实环境可用。
 
 ## 1. 构建与静态检查
@@ -53,10 +53,10 @@ connector id=512 connected=true modes=2
 
 ## 4. Seat 会话
 
-需要 TTY + `seatd` 或 `logind`：
+需要 TTY + `seatd` 或 `logind`。在 TTY3 上使用 logind 时必须传当前会话 ID：
 
 ```bash
-./build/dev/powerwm_seat_probe
+XDG_SESSION_ID=4 LIBSEAT_BACKEND=logind ./build/dev/powerwm_seat_probe
 ```
 
 期望：
@@ -66,28 +66,39 @@ connector id=512 connected=true modes=2
 - 切换 VT 时打印 enable/disable 变化；
 - 切回原 VT 后恢复。
 
-当前无 seat provider 的环境会输出：
+TTY3 实测：
 
 ```text
-error: libseat_open_seat failed
+seat enabled=false device=/dev/dri/card1 fd=6
+seat enabled=true
 ```
 
-这属于预期降级。
+无 seat provider 时输出 `error: libseat_open_seat failed`，属于预期降级。
 
 ## 5. DRM 动画与 page flip
 
-在 TTY 中运行：
+在 TTY3 中运行：
 
 ```bash
-sudo ./build/dev/powerwm_drm_bringup
+XDG_SESSION_ID=4 LIBSEAT_BACKEND=logind ./build/dev/powerwm_drm_bringup 1200
 ```
+
+可选参数是帧数，默认 180（约 3 秒）。
 
 期望：
 
 - 输出双缓冲渐变动画约 3 秒；
 - 无撕裂；
 - 进程退出后 VT 恢复；
-- 若 seat 可用，日志显示通过 libseat 打开设备；否则回退直接 DRM。
+- seat 可用时通过 libseat 打开设备。
+
+TTY3 实测结果：
+
+```text
+presented 180 frames
+```
+
+VT 切换实测：在动画运行期间来回切换 TTY2/TTY3 **10 次**，seat enable/disable 正常，恢复后继续提交，最终完成 **1200 帧**。
 
 ## 6. 硬件验收项
 
@@ -108,9 +119,10 @@ sudo ./build/dev/powerwm_drm_bringup
 | 构建 / 单测 | 通过 |
 | `powerwm_probe` | 通过，检测到 2880x1800@120Hz |
 | `powerwm_input_probe` | 通过，5 秒无事件退出 |
-| `powerwm_seat_probe` | 失败：无 seat provider（预期降级） |
-| DRM 动画 | 未执行，避免打断当前桌面会话 |
-| VT / 热插拔 / 1 小时 | 待 TTY 硬件验证 |
+| `powerwm_seat_probe` | TTY3 + logind 通过 |
+| DRM 动画 | TTY3 通过，presented 180 frames |
+| VT 切换 | 10 次来回切换、1200 帧通过 |
+| 热插拔 / 50 次 VT / 1 小时 | 待继续验证（已覆盖 10 次 VT） |
 
 ## 8. 已知限制
 

@@ -2,7 +2,7 @@
 
 > 一个直接运行在 Linux DRM/KMS 之上、使用现代 C++ 从零构建的 Wayland 合成器与平铺窗口管理器。
 
-**状态：Phase 1（点亮）· 实现完成，硬件验收待执行 · 尚不可日常使用**
+**状态：Phase 1（点亮）· 实现完成，硬件验收进行中 · 尚不可日常使用**
 **许可证：Apache-2.0**
 
 powerwm 的目标不是再做一个配置层，而是构建一条完整、可控、可测量的图形栈：
@@ -91,8 +91,8 @@ ctest --preset dev --output-on-failure
 ```bash
 ./build/dev/powerwm --version
 ./build/dev/powerwm --build-info
-sudo ./build/dev/powerwm_drm_bringup
-sudo ./build/dev/powerwm_input_probe
+sudo ./build/dev/powerwm_drm_bringup [frame-count]
+./build/dev/powerwm_input_probe
 ./build/dev/powerwm_seat_probe
 ./build/dev/powerwm_probe
 ```

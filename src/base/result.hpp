@@ -26,12 +26,13 @@ struct error {
     error_code code;
     std::string_view message;
     std::source_location where{};
+    i32 system_error = 0;
 };
 
-[[nodiscard]] inline auto
-make_error(error_code code, std::string_view message,
-           std::source_location where = std::source_location::current()) noexcept -> error {
-    return {code, message, where};
+[[nodiscard]] inline auto make_error(error_code code, std::string_view message,
+                                     std::source_location where = std::source_location::current(),
+                                     i32 system_error = 0) noexcept -> error {
+    return {code, message, where, system_error};
 }
 
 template <typename T = void>

@@ -29,6 +29,7 @@ auto timer_fd::arm_ms(u32 milliseconds) noexcept -> result<void> {
     itimerspec specification{};
     specification.it_value.tv_sec = static_cast<time_t>(milliseconds / 1000);
     specification.it_value.tv_nsec = static_cast<long>(milliseconds % 1000) * 1000000L;
+    specification.it_interval = specification.it_value;
     if (::timerfd_settime(fd_, 0, &specification, nullptr) != 0) {
         return std::unexpected(make_error(error_code::io, "timerfd_settime failed"));
     }

@@ -186,8 +186,10 @@ struct atomic_request {
     }
 
     [[nodiscard]] auto add_property(u32 object_id, u32 property_id, u64 value) const noexcept
-        -> bool {
-        return drmModeAtomicAddProperty(handle, object_id, property_id, value) == 0;
+        -> i32 {
+        const i32 result =
+            static_cast<i32>(drmModeAtomicAddProperty(handle, object_id, property_id, value));
+        return result < 0 ? result : 0;
     }
 
     [[nodiscard]] auto merge(const atomic_request& other) const noexcept -> bool {
@@ -364,6 +366,8 @@ class device {
     [[nodiscard]] static auto create_borrowed(handle_t fd) noexcept -> device;
 
     [[nodiscard]] static auto open_first_available() noexcept -> result<device>;
+
+    [[nodiscard]] auto is_master() const noexcept -> bool;
 
     [[nodiscard]] auto set_master() const noexcept -> result<void>;
 

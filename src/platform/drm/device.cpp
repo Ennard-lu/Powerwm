@@ -4,6 +4,7 @@
 #include <platform/drm/device.hpp>
 #include <platform/event/poll.hpp>
 
+#include <cerrno>
 #include <string>
 #include <system_error>
 
@@ -40,6 +41,10 @@ auto device::open_first_available() noexcept -> result<device> {
     }
 
     return std::unexpected(make_error(error_code::not_found, "no DRM card device found"));
+}
+
+auto device::is_master() const noexcept -> bool {
+    return drmIsMaster(fd_handle_) == 1;
 }
 
 auto device::set_master() const noexcept -> result<void> {
@@ -101,7 +106,8 @@ auto device::get_plane_properties(u32 plane_id) const noexcept -> property_set {
 auto device::commit_atomic(const atomic_request& request, u32 flags) const noexcept
     -> result<void> {
     if (drmModeAtomicCommit(fd_handle_, request.handle, flags, nullptr) != 0) {
-        return std::unexpected(make_error(error_code::io, "drmModeAtomicCommit failed"));
+        return std::unexpected(make_error(error_code::io, "drmModeAtomicCommit failed",
+                                          std::source_location::current(), errno));
     }
     return {};
 }
@@ -188,14 +194,13 @@ auto device::create_property_blob(std::span<const std::byte> data) const noexcep
 
 namespace {
 
-struct page_flip_bridge {
-    device::page_flip_callback callback;
-    void* context;
-};
+device::page_flip_callback active_page_flip_callback = nullptr;
+void* active_page_flip_context = nullptr;
 
-auto dispatch_page_flip(int, unsigned int, unsigned int, unsigned int, void* user_data) -> void {
-    auto* bridge = static_cast<page_flip_bridge*>(user_data);
-    bridge->callback(bridge->context);
+auto dispatch_page_flip(int, unsigned int, unsigned int, unsigned int, void*) -> void {
+    if (active_page_flip_callback != nullptr) {
+        active_page_flip_callback(active_page_flip_context);
+    }
 }
 
 auto mark_page_flip(void* user_data) -> void {
@@ -224,7 +229,8 @@ auto device::wait_for_page_flip(i32 timeout_ms) const noexcept -> result<void> {
 
 auto device::handle_events(page_flip_callback callback, void* context) const noexcept
     -> result<void> {
-    page_flip_bridge bridge{.callback = callback, .context = context};
+    active_page_flip_callback = callback;
+    active_page_flip_context = context;
     drmEventContext event_context{};
     event_context.version = DRM_EVENT_CONTEXT_VERSION;
     if (callback != nullptr) {

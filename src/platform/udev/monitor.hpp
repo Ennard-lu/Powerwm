@@ -14,6 +14,7 @@ struct device_event {
     std::string action;
     std::string subsystem;
     std::string devnode;
+    bool hotplug = false;
 };
 
 class monitor {

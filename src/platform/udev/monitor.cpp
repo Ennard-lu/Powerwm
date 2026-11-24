@@ -4,10 +4,17 @@
 
 #include <libudev.h>
 
+#include <string_view>
+
 namespace {
 
 auto device_string(const char* value) -> std::string {
     return value != nullptr ? std::string{value} : std::string{};
+}
+
+auto device_hotplug(udev_device* device) -> bool {
+    const char* value = udev_device_get_property_value(device, "HOTPLUG");
+    return value != nullptr && std::string_view{value} == "1";
 }
 
 }
@@ -64,6 +71,7 @@ auto monitor::receive() noexcept -> std::optional<device_event> {
         .action = device_string(udev_device_get_action(device)),
         .subsystem = device_string(udev_device_get_subsystem(device)),
         .devnode = device_string(udev_device_get_devnode(device)),
+        .hotplug = device_hotplug(device),
     };
     udev_device_unref(device);
     return event;

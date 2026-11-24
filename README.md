@@ -6,7 +6,7 @@
 [![CI](https://github.com/Ennard-lu/Powerwm/actions/workflows/ci.yml/badge.svg)](https://github.com/Ennard-lu/Powerwm/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status: Phase 1 (ignition) · implementation complete, hardware validation pending · not usable as a daily desktop**
+**Status: Phase 1 (ignition) · implementation complete, hardware validation in progress · not usable as a daily desktop**
 
 ## Why powerwm
 
@@ -183,8 +183,8 @@ The application skeleton is safe to run in a normal session. The DRM tool takes 
 DRM device, so run it from a TTY with the required permissions:
 
 ```bash
-sudo ./build/dev/powerwm_drm_bringup
-sudo ./build/dev/powerwm_input_probe
+sudo ./build/dev/powerwm_drm_bringup [frame-count]
+./build/dev/powerwm_input_probe
 ./build/dev/powerwm_seat_probe
 ./build/dev/powerwm_probe
 ```

@@ -26,6 +26,7 @@
 - udev DRM 热插拔监控与输出运行时重启。
 - headless 输出骨架与单元测试。
 - `powerwm_probe` 只读输出诊断。
+- TTY3 硬件验证：1200 帧 page flip 动画、10 次 VT 来回切换通过；修复 libdrm 属性计数返回值、page flip 回调上下文、周期 timerfd、seat master 恢复与热插拔事件过滤。
 - 依赖 DRM device 的资源改由 `device::create_*` 创建；统一使用 `auto foo() -> T` 函数声明风格。
 - 英文 README；中文 README 移至 `docs/README.zh-CN.md`。
 - Apache-2.0 `LICENSE` 与 SPDX 文件头。

@@ -12,10 +12,13 @@
 #include <platform/seat/seat.hpp>
 #include <platform/udev/monitor.hpp>
 
+#include <charconv>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <print>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -32,6 +35,13 @@ struct drm_runtime {
     pwm::raii<seat::seat_device> seat_device;
     pwm::raii<drm::device> device;
     bool has_seat = false;
+};
+
+struct optional_sources {
+    pwm::raii<input::context> input;
+    pwm::raii<udev::monitor> udev_monitor;
+    bool has_input = false;
+    bool has_udev = false;
 };
 
 struct output_properties {
@@ -68,11 +78,13 @@ struct demo_state {
     pwm::u32 frame = 0;
     pwm::u32 frame_count = 180;
     pwm::u32 waiting_ticks = 0;
+    pwm::u32 commit_attempts = 0;
 };
 
 auto require_value(pwm::result<void>&& value) -> void {
     if (!value) {
-        std::println(stderr, "error: {}", value.error().message);
+        std::println(stderr, "error: {} (system={})", value.error().message,
+                     value.error().system_error);
         std::exit(EXIT_FAILURE);
     }
 }
@@ -80,7 +92,8 @@ auto require_value(pwm::result<void>&& value) -> void {
 template <typename T>
 auto require_value(pwm::result<T>&& value) -> T {
     if (!value) {
-        std::println(stderr, "error: {}", value.error().message);
+        std::println(stderr, "error: {} (system={})", value.error().message,
+                     value.error().system_error);
         std::exit(EXIT_FAILURE);
     }
     return std::move(*value);
@@ -142,8 +155,32 @@ auto wait_until_enabled(seat::session& session) -> void {
     }
 }
 
-auto enable_atomic_features(drm::device& device) -> void {
-    require_value(device.set_master());
+auto create_optional_sources() -> optional_sources {
+    optional_sources sources;
+
+    auto input_result = input::context::create("seat0");
+    if (input_result) {
+        sources.input = pwm::raii{std::move(*input_result)};
+        sources.has_input = true;
+    } else {
+        std::println(stderr, "warning: libinput unavailable");
+    }
+
+    auto udev_result = udev::monitor::create();
+    if (udev_result) {
+        sources.udev_monitor = pwm::raii{std::move(*udev_result)};
+        sources.has_udev = true;
+    } else {
+        std::println(stderr, "warning: udev monitor unavailable");
+    }
+
+    return sources;
+}
+
+auto enable_atomic_features(drm::device& device, bool acquire_master) -> void {
+    if (acquire_master && !device.is_master()) {
+        require_value(device.set_master());
+    }
     require_value(device.set_atomic_enabled(true));
     require_value(device.set_universal_planes_enabled(true));
 }
@@ -217,7 +254,10 @@ auto fill_animation_frame(drm::mapped_memory& memory, const drm::buffer_format& 
 
 auto add_required_property(drm::atomic_request& request, pwm::u32 object_id, pwm::u32 property_id,
                            pwm::u64 value) -> void {
-    if (!request.add_property(object_id, property_id, value)) {
+    const pwm::i32 result = request.add_property(object_id, property_id, value);
+    if (result != 0) {
+        std::println(stderr, "property add failed object={} property={} value={} result={}",
+                     object_id, property_id, value, result);
         pwm::terminate_with_message("drmModeAtomicAddProperty failed");
     }
 }
@@ -247,8 +287,11 @@ auto add_plane_properties(const drm::output_target& output, const output_propert
 
 auto commit_frame(drm::device& device, const drm::output_target& output,
                   const output_properties& ids, const drm::framebuffer& framebuffer,
-                  const drm::property_blob& blob, bool allow_modeset) -> void {
-    auto request = pwm::raii{require_value(drm::atomic_request::create())};
+                  const drm::property_blob& blob, bool allow_modeset) -> pwm::result<void> {
+    auto request = drm::atomic_request::create();
+    if (!request) {
+        return std::unexpected(request.error());
+    }
     add_crtc_and_connector_properties(output, ids, blob, request.value());
     add_plane_properties(output, ids, framebuffer, request.value());
 
@@ -256,7 +299,7 @@ auto commit_frame(drm::device& device, const drm::output_target& output,
     if (allow_modeset) {
         flags |= drm::atomic_allow_modeset;
     }
-    require_value(device.commit_atomic(request.value(), flags));
+    return device.commit_atomic(request.value(), flags);
 }
 
 auto print_event(const input::input_event& input_event) -> void {
@@ -287,18 +330,22 @@ auto print_event(const input::input_event& input_event) -> void {
     }
 }
 
-auto present_frame(demo_state& state) -> void {
+auto present_frame(demo_state& state) -> pwm::result<void> {
     const bool use_first = state.frame % 2 == 0;
     auto& memory = use_first ? *state.first_memory : *state.second_memory;
     const auto& framebuffer = use_first ? *state.first_framebuffer : *state.second_framebuffer;
 
     fill_animation_frame(memory, *state.format, state.frame);
-    commit_frame(*state.device, *state.output, *state.properties, framebuffer, *state.mode_blob,
-                 state.allow_modeset);
+    auto committed = commit_frame(*state.device, *state.output, *state.properties, framebuffer,
+                                  *state.mode_blob, state.allow_modeset);
+    if (!committed) {
+        return std::unexpected(committed.error());
+    }
     state.allow_modeset = false;
     state.waiting_for_flip = true;
     state.waiting_ticks = 0;
     ++state.frame;
+    return {};
 }
 
 auto on_page_flip(void* context) -> void {
@@ -319,10 +366,13 @@ auto on_drm_event(void* context, event::poll_event) -> void {
 auto on_udev_event(void* context, event::poll_event) -> void {
     auto& state = *static_cast<demo_state*>(context);
     if (auto device_event = state.udev_monitor->receive()) {
-        std::println("udev action={} subsystem={} devnode={}", device_event->action,
-                     device_event->subsystem, device_event->devnode);
-        state.restart_requested = true;
-        state.running = false;
+        std::println("udev action={} subsystem={} devnode={} hotplug={}", device_event->action,
+                     device_event->subsystem, device_event->devnode, device_event->hotplug);
+        if (device_event->hotplug || device_event->action == "add" ||
+            device_event->action == "remove") {
+            state.restart_requested = true;
+            state.running = false;
+        }
     }
 }
 
@@ -360,14 +410,10 @@ auto on_timer(void* context, event::poll_event) -> void {
             state.session_enabled = enabled;
             state.waiting_for_flip = false;
             state.waiting_ticks = 0;
+            state.commit_attempts = 0;
+            std::println("seat enabled={}", enabled);
             if (enabled) {
                 state.allow_modeset = true;
-                auto master = state.device->set_master();
-                if (!master) {
-                    std::println(stderr, "master error: {}", master.error().message);
-                    state.running = false;
-                    return;
-                }
             }
         }
     }
@@ -387,10 +433,76 @@ auto on_timer(void* context, event::poll_event) -> void {
         state.running = false;
         return;
     }
-    present_frame(state);
+    auto presented = present_frame(state);
+    if (!presented) {
+        ++state.commit_attempts;
+        state.allow_modeset = true;
+        if (state.commit_attempts > 120) {
+            std::println(stderr, "commit error: {} (system={})", presented.error().message,
+                         presented.error().system_error);
+            state.running = false;
+        }
+        return;
+    }
+    state.commit_attempts = 0;
 }
 
-auto run_drm_bringup() -> run_result {
+auto parse_frame_count(int argc, char** argv) -> std::optional<pwm::u32> {
+    if (argc == 1) {
+        return 180;
+    }
+    if (argc != 2) {
+        return std::nullopt;
+    }
+
+    const std::string_view text{argv[1]};
+    pwm::u32 value = 0;
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (error != std::errc{} || end != text.data() + text.size() || value == 0) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+auto run_demo_loop(demo_state& state) -> pwm::result<void> {
+    event::event_loop loop;
+    if (auto added =
+            loop.add(state.device->fd(), event::poll_event::readable, on_drm_event, &state);
+        !added) {
+        return std::unexpected(added.error());
+    }
+    if (auto added = loop.add(state.timer->fd(), event::poll_event::readable, on_timer, &state);
+        !added) {
+        return std::unexpected(added.error());
+    }
+    if (state.input != nullptr) {
+        if (auto added =
+                loop.add(state.input->fd(), event::poll_event::readable, on_input_event, &state);
+            !added) {
+            return std::unexpected(added.error());
+        }
+    }
+    if (state.udev_monitor != nullptr) {
+        if (auto added = loop.add(state.udev_monitor->fd(), event::poll_event::readable,
+                                  on_udev_event, &state);
+            !added) {
+            return std::unexpected(added.error());
+        }
+    }
+    if (auto armed = state.timer->arm_ms(16); !armed) {
+        return std::unexpected(armed.error());
+    }
+
+    while (state.running) {
+        auto dispatched = loop.run_once(100);
+        if (!dispatched) {
+            return std::unexpected(dispatched.error());
+        }
+    }
+    return {};
+}
+
+auto run_drm_bringup(pwm::u32 frame_count) -> run_result {
     auto runtime = open_drm_runtime();
     auto& device = runtime.device.value();
     seat::session* session = runtime.has_seat ? &runtime.session.value() : nullptr;
@@ -398,7 +510,7 @@ auto run_drm_bringup() -> run_result {
     if (session != nullptr) {
         wait_until_enabled(*session);
     }
-    enable_atomic_features(device);
+    enable_atomic_features(device, session == nullptr);
 
     const drm::output_target output = require_value(device.find_primary_output());
     const drm::buffer_format format = make_buffer_format(output);
@@ -412,32 +524,13 @@ auto run_drm_bringup() -> run_result {
     auto blob = create_mode_blob(device, output.mode);
     const output_properties ids = lookup_output_properties(device, output);
 
-    auto input_result = input::context::create("seat0");
-    pwm::raii<input::context> input_context;
-    bool has_input = false;
-    if (input_result) {
-        input_context = pwm::raii{std::move(*input_result)};
-        has_input = true;
-    } else {
-        std::println(stderr, "warning: libinput unavailable");
-    }
-
-    auto udev_result = udev::monitor::create();
-    pwm::raii<udev::monitor> udev_monitor;
-    bool has_udev = false;
-    if (udev_result) {
-        udev_monitor = pwm::raii{std::move(*udev_result)};
-        has_udev = true;
-    } else {
-        std::println(stderr, "warning: udev monitor unavailable");
-    }
-
+    auto sources = create_optional_sources();
     auto timer = pwm::raii{require_value(event::timer_fd::create())};
     demo_state state{
         .device = &device,
         .session = session,
-        .udev_monitor = has_udev ? &udev_monitor.value() : nullptr,
-        .input = has_input ? &input_context.value() : nullptr,
+        .udev_monitor = sources.has_udev ? &sources.udev_monitor.value() : nullptr,
+        .input = sources.has_input ? &sources.input.value() : nullptr,
         .output = &output,
         .properties = &ids,
         .mode_blob = &blob.value(),
@@ -453,28 +546,16 @@ auto run_drm_bringup() -> run_result {
         .running = true,
         .restart_requested = false,
         .frame = 0,
-        .frame_count = 180,
+        .frame_count = frame_count,
         .waiting_ticks = 0,
+        .commit_attempts = 0,
     };
 
-    event::event_loop loop;
-    require_value(loop.add(device.fd(), event::poll_event::readable, on_drm_event, &state));
-    require_value(loop.add(timer->fd(), event::poll_event::readable, on_timer, &state));
-    if (has_input) {
-        require_value(
-            loop.add(input_context->fd(), event::poll_event::readable, on_input_event, &state));
-    }
-    if (has_udev) {
-        require_value(
-            loop.add(udev_monitor->fd(), event::poll_event::readable, on_udev_event, &state));
-    }
-    require_value(timer->arm_ms(16));
+    require_value(run_demo_loop(state));
 
-    while (state.running) {
-        require_value(loop.run_once(100));
-    }
+    std::println("presented {} frames", state.frame);
 
-    if (session == nullptr || session->is_enabled()) {
+    if (session == nullptr && device.is_master()) {
         require_value(device.drop_master());
     }
     return state.restart_requested ? run_result::restart : run_result::success;
@@ -482,9 +563,15 @@ auto run_drm_bringup() -> run_result {
 
 }
 
-int main() {
+int main(int argc, char** argv) {
+    const auto frame_count = parse_frame_count(argc, argv);
+    if (!frame_count) {
+        std::println(stderr, "usage: powerwm_drm_bringup [frame-count]");
+        return EXIT_FAILURE;
+    }
+
     while (true) {
-        const run_result result = run_drm_bringup();
+        const run_result result = run_drm_bringup(*frame_count);
         if (result == run_result::restart) {
             continue;
         }
