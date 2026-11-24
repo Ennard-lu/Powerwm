@@ -270,6 +270,8 @@ KMS damage must be conservative: overdraw rather than miss.
 - image, readback buffer, offscreen clear;
 - DMA-BUF export and KMS framebuffer import;
 - render pass, graphics pipeline, shader modules, fullscreen triangle;
+- textured scene renderer with rounded corners, shadows, blur, transforms, and clipping;
+- damage-scissored partial redraw and cached per-image framebuffers;
 - all Vulkan C API stays in this layer; business code sees project types.
 
 Target renderer:
@@ -291,8 +293,9 @@ public:
 
 ### scene/
 
-Current foundation: `node` parent/child tree, `transaction` move/show changes, and
-geometry/region damage merging. Rendering integration comes next.
+Implemented: `node` parent/child tree, styles (fill, texture, radius, shadow, blur,
+transform, opacity, child clipping), `transaction` move/show changes, surface invalidation,
+and scene damage collection. The Vulkan scene renderer consumes the tree directly.
 
 ```text
 output_node

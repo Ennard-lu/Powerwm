@@ -195,6 +195,45 @@ auto offscreen_target::render(color clear_color) noexcept -> result<void> {
     return fence_.wait(1000000000);
 }
 
+auto offscreen_target::native_image() const noexcept -> void* {
+    return image_.native_handle();
+}
+
+auto offscreen_target::download() noexcept -> result<void> {
+    if (auto reset = fence_.reset(); !reset) {
+        return std::unexpected(reset.error());
+    }
+    if (auto begun = command_buffer_.begin(); !begun) {
+        return std::unexpected(begun.error());
+    }
+
+    const VkCommandBuffer command_handle =
+        reinterpret_cast<VkCommandBuffer>(command_buffer_.native_handle());
+    const VkImage image_handle = reinterpret_cast<VkImage>(image_.native_handle());
+    const VkBuffer buffer_handle = reinterpret_cast<VkBuffer>(buffer_.native_handle());
+
+    record_image_barrier(command_handle, image_handle, VK_IMAGE_LAYOUT_GENERAL,
+                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_MEMORY_WRITE_BIT,
+                         VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT);
+    record_copy(command_handle, image_handle, buffer_handle, width_px_, height_px_);
+    record_image_barrier(command_handle, image_handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                         VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_READ_BIT,
+                         VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+    record_buffer_barrier(command_handle, buffer_handle);
+
+    if (auto ended = command_buffer_.end(); !ended) {
+        return std::unexpected(ended.error());
+    }
+    if (auto submitted = submit_offscreen(queue_, command_handle,
+                                          reinterpret_cast<VkFence>(fence_.native_handle()));
+        !submitted) {
+        return std::unexpected(submitted.error());
+    }
+    return fence_.wait(1000000000);
+}
+
 auto offscreen_target::read_pixel(u32 x, u32 y) const noexcept -> result<color> {
     const auto* pixels = static_cast<const u8*>(buffer_.mapped_data());
     const usize offset = (static_cast<usize>(y) * width_px_ + x) * 4;

@@ -24,7 +24,7 @@ set(POWERWM_SHADER_BINARY_DIR "${CMAKE_BINARY_DIR}/shaders")
 file(MAKE_DIRECTORY "${POWERWM_SHADER_BINARY_DIR}")
 
 set(POWERWM_SHADER_OUTPUTS "")
-foreach(SHADER triangle.vert triangle.frag)
+foreach(SHADER triangle.vert triangle.frag scene.vert scene.frag)
     set(SHADER_INPUT "${POWERWM_SHADER_SOURCE_DIR}/${SHADER}")
     set(SHADER_OUTPUT "${POWERWM_SHADER_BINARY_DIR}/${SHADER}.spv")
     add_custom_command(
@@ -89,6 +89,8 @@ add_library(powerwm_vulkanpp STATIC
     src/render/vulkanpp/offscreen.cpp
     src/render/vulkanpp/triangle.cpp
     src/render/vulkanpp/triangle_pass.cpp
+    src/render/vulkanpp/texture.cpp
+    src/render/vulkanpp/scene_renderer.cpp
 )
 target_link_libraries(powerwm_vulkanpp PUBLIC
     powerwm_core
@@ -132,6 +134,20 @@ if(POWERWM_BUILD_BRINGUP_TOOL)
     )
     add_dependencies(powerwm_vulkan_kms_demo powerwm_shaders)
 
+    add_executable(powerwm_render_benchmark tools/render_benchmark.cpp)
+    target_link_libraries(powerwm_render_benchmark PRIVATE powerwm_vulkanpp)
+    target_compile_definitions(powerwm_render_benchmark PRIVATE
+        POWERWM_SHADER_DIR="${POWERWM_SHADER_BINARY_DIR}"
+    )
+    add_dependencies(powerwm_render_benchmark powerwm_shaders)
+
+    add_executable(powerwm_vulkan_compositor tools/vulkan_compositor.cpp)
+    target_link_libraries(powerwm_vulkan_compositor PRIVATE powerwm_vulkanpp powerwm_seat)
+    target_compile_definitions(powerwm_vulkan_compositor PRIVATE
+        POWERWM_SHADER_DIR="${POWERWM_SHADER_BINARY_DIR}"
+    )
+    add_dependencies(powerwm_vulkan_compositor powerwm_shaders)
+
     add_executable(powerwm_vulkan_pipeline_probe tools/vulkan_pipeline_probe.cpp)
     target_link_libraries(powerwm_vulkan_pipeline_probe PRIVATE powerwm_vulkanpp)
     target_compile_definitions(powerwm_vulkan_pipeline_probe PRIVATE
@@ -160,4 +176,13 @@ if(BUILD_TESTING)
     add_executable(powerwm_scene_tests tests/unit/test_scene.cpp)
     target_link_libraries(powerwm_scene_tests PRIVATE powerwm_core)
     add_test(NAME unit.scene COMMAND powerwm_scene_tests)
+
+    add_executable(powerwm_render_tests tests/unit/test_render.cpp)
+    target_link_libraries(powerwm_render_tests PRIVATE powerwm_vulkanpp)
+    target_compile_definitions(powerwm_render_tests PRIVATE
+        POWERWM_SHADER_DIR="${POWERWM_SHADER_BINARY_DIR}"
+    )
+    add_dependencies(powerwm_render_tests powerwm_shaders)
+    add_test(NAME unit.render COMMAND powerwm_render_tests)
+    set_tests_properties(unit.render PROPERTIES SKIP_RETURN_CODE 77)
 endif()

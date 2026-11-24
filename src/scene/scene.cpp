@@ -3,6 +3,7 @@
 #include <scene/scene.hpp>
 
 #include <algorithm>
+#include <utility>
 
 namespace pwm::scene {
 
@@ -59,6 +60,28 @@ auto node::opacity() const noexcept -> f32 {
 
 auto node::set_opacity(f32 value) noexcept -> void {
     opacity_ = std::clamp(value, 0.0F, 1.0F);
+}
+
+auto node::style() const noexcept -> const node_style& {
+    return style_;
+}
+
+auto node::set_style(const node_style& value) noexcept -> void {
+    style_ = value;
+}
+
+auto node::set_texture(texture_id value) noexcept -> void {
+    style_.texture = value;
+}
+
+auto node::invalidate(base::recti value) -> void {
+    damage_.add(value);
+}
+
+auto node::take_damage() -> base::region {
+    base::region result = std::move(damage_);
+    damage_.clear();
+    return result;
 }
 
 auto transaction::find(node& target) -> change* {
@@ -132,6 +155,41 @@ auto scene::root() noexcept -> node& {
 
 auto scene::begin() noexcept -> transaction {
     return {};
+}
+
+auto scene::add_damage(base::recti value) -> void {
+    damage_.add(value);
+}
+
+auto scene::add_damage(const base::region& value) -> void {
+    for (const base::recti rect : value.rects()) {
+        damage_.add(rect);
+    }
+}
+
+auto scene::damage() const noexcept -> const base::region& {
+    return damage_;
+}
+
+auto scene::take_damage() -> base::region {
+    base::region result = std::move(damage_);
+    damage_.clear();
+    return result;
+}
+
+auto scene::collect_damage() -> base::region {
+    collect_node_damage(root_, damage_);
+    return take_damage();
+}
+
+auto scene::collect_node_damage(node& target, base::region& result) -> void {
+    const base::region damage = target.take_damage();
+    for (const base::recti rect : damage.rects()) {
+        result.add(rect);
+    }
+    for (node* child : target.children()) {
+        collect_node_damage(*child, result);
+    }
 }
 
 }

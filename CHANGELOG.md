@@ -33,8 +33,16 @@ pre-1.0 `0.x.y` convention.
   triangle presentation through DMA-BUF + KMS.
 - Phase 2 foundation: geometry/region damage merging, scene node tree, transactions,
   and unit tests for geometry and scene damage.
+- Phase 2 completion: textured scene renderer with rounded corners, shadows, blur,
+  rotation/scale transforms, parent clipping, and per-damage scissor redraw.
+- Scene style/damage API, surface invalidation, and scene damage collection.
+- DMA-BUF format fallback and DRM format modifier negotiation.
+- `powerwm_vulkan_compositor`: event-loop compositor with seat/VT handling and
+  double-buffered KMS presentation.
+- `powerwm_render_benchmark`: 100 animated 256×256 surfaces at 1080p.
+- `unit.render`: golden pixels, partial redraw, and steady-state allocation checks.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
-  `powerwm_input_probe`, `powerwm_seat_probe`.
+  `powerwm_input_probe`, `powerwm_seat_probe`, `powerwm_vulkan_pipeline_probe`.
 
 ### Changed
 

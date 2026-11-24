@@ -11,6 +11,27 @@
 namespace pwm::scene {
 
 using node_id = u64;
+using texture_id = u64;
+
+struct color {
+    f32 red = 0.0F;
+    f32 green = 0.0F;
+    f32 blue = 0.0F;
+    f32 alpha = 1.0F;
+};
+
+struct node_style {
+    color fill{};
+    color shadow{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 0.45F};
+    texture_id texture = 0;
+    f32 corner_radius = 0.0F;
+    f32 shadow_radius = 0.0F;
+    f32 shadow_offset_y = 0.0F;
+    f32 blur_radius = 0.0F;
+    f32 rotation = 0.0F;
+    f32 scale = 1.0F;
+    bool clip_children = false;
+};
 
 class node {
   public:
@@ -41,6 +62,16 @@ class node {
 
     auto set_opacity(f32 value) noexcept -> void;
 
+    [[nodiscard]] auto style() const noexcept -> const node_style&;
+
+    auto set_style(const node_style& value) noexcept -> void;
+
+    auto set_texture(texture_id value) noexcept -> void;
+
+    auto invalidate(base::recti value) -> void;
+
+    [[nodiscard]] auto take_damage() -> base::region;
+
   private:
     node_id id_ = 0;
     node* parent_ = nullptr;
@@ -48,6 +79,8 @@ class node {
     base::recti bounds_{};
     bool visible_ = true;
     f32 opacity_ = 1.0F;
+    node_style style_{};
+    base::region damage_;
 };
 
 class transaction {
@@ -85,8 +118,21 @@ class scene {
 
     [[nodiscard]] auto begin() noexcept -> transaction;
 
+    auto add_damage(base::recti value) -> void;
+
+    auto add_damage(const base::region& value) -> void;
+
+    [[nodiscard]] auto damage() const noexcept -> const base::region&;
+
+    [[nodiscard]] auto take_damage() -> base::region;
+
+    [[nodiscard]] auto collect_damage() -> base::region;
+
   private:
+    auto collect_node_damage(node& target, base::region& result) -> void;
+
     node root_{0};
+    base::region damage_;
 };
 
 }

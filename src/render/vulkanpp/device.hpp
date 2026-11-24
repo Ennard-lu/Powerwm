@@ -40,6 +40,8 @@ class device {
 
     [[nodiscard]] auto native_queue() const noexcept -> void*;
 
+    [[nodiscard]] auto native_physical() const noexcept -> void*;
+
     [[nodiscard]] auto queue_family_index() const noexcept -> u32;
 
     [[nodiscard]] auto find_memory_type(u32 type_bits, u32 required_flags) const noexcept

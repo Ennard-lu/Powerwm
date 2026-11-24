@@ -9,6 +9,8 @@
 namespace pwm::platform::drm {
 
 inline constexpr u32 format_xrgb8888 = DRM_FORMAT_XRGB8888;
+inline constexpr u32 format_argb8888 = DRM_FORMAT_ARGB8888;
+inline constexpr u32 format_abgr8888 = DRM_FORMAT_ABGR8888;
 
 enum class pixel_format : u32 {
     xrgb8888,

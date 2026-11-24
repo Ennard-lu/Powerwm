@@ -69,6 +69,11 @@ auto load_spirv(const std::string& path) -> pwm::result<std::vector<std::byte>> 
     return data;
 }
 
+auto drm_format_for(vk::dma_buf_pixel_format format) -> pwm::u32 {
+    return format == vk::dma_buf_pixel_format::rgba8888 ? drm::format_abgr8888
+                                                        : drm::format_xrgb8888;
+}
+
 auto enable_drm(drm::device& device) -> void {
     if (!device.is_master()) {
         require_value(device.set_master());
@@ -161,16 +166,23 @@ auto run_demo() -> int {
         vk::create_dma_buf_image(device.value(), output.mode.width_px(), output.mode.height_px()))};
     auto second_image = pwm::raii{require_value(
         vk::create_dma_buf_image(device.value(), output.mode.width_px(), output.mode.height_px()))};
-    require_value(first_image->clear({.red = 0.20F, .green = 0.45F, .blue = 0.80F, .alpha = 1.0F}));
+    auto vertex_spirv =
+        require_value(load_spirv(std::string{POWERWM_SHADER_DIR} + "/triangle.vert.spv"));
+    auto fragment_spirv =
+        require_value(load_spirv(std::string{POWERWM_SHADER_DIR} + "/triangle.frag.spv"));
+    require_value(first_image->render_triangle(std::span<const std::byte>{vertex_spirv},
+                                               std::span<const std::byte>{fragment_spirv}));
     require_value(
         second_image->clear({.red = 0.80F, .green = 0.30F, .blue = 0.20F, .alpha = 1.0F}));
 
     auto first_framebuffer = pwm::raii{require_value(drm_device->create_framebuffer_from_dma_buf(
         first_image->fd(), first_image->width_px(), first_image->height_px(),
-        first_image->pitch_bytes(), drm::format_xrgb8888, 0))};
+        first_image->pitch_bytes(), drm_format_for(first_image->pixel_format()),
+        first_image->modifier()))};
     auto second_framebuffer = pwm::raii{require_value(drm_device->create_framebuffer_from_dma_buf(
         second_image->fd(), second_image->width_px(), second_image->height_px(),
-        second_image->pitch_bytes(), drm::format_xrgb8888, 0))};
+        second_image->pitch_bytes(), drm_format_for(second_image->pixel_format()),
+        second_image->modifier()))};
 
     present(drm_device.value(), output, ids, blob.value(), first_framebuffer.value(), true);
     std::this_thread::sleep_for(1s);

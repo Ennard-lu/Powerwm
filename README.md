@@ -34,20 +34,22 @@ from the first frame.
 
 ## Current status
 
-**Phase 2 — early Vulkan foundation. Not usable as a daily desktop yet.**
+**Phase 2 complete — Vulkan scene composition works end to end. Not usable as a daily desktop yet.**
 
 Working today:
 
 - native DRM/KMS output with atomic modesetting and page flips
 - double-buffered animation and VT pause/resume
 - seat, input, hotplug, and event-loop foundations
-- Vulkan shader pipeline, scene/damage foundation, DMA-BUF export, and KMS page-flip presentation
-- headless output and test scaffolding
-- diagnostics for DRM outputs and Vulkan devices
+- Vulkan scene renderer with textures, transforms, clipping, rounded corners, shadows, and blur
+- surface/scene/output damage tracking with partial redraw
+- DMA-BUF format/modifier negotiation and KMS page-flip presentation
+- event-loop compositor with seat and VT pause/resume
+- golden-image, damage, allocation, and frame-budget tests
+- headless output and diagnostics for DRM outputs and Vulkan devices
 
 Still ahead:
 
-- Vulkan rendering and scene composition
 - the in-tree Wayland protocol stack
 - tiling layouts, workspaces, and window policy
 - the desktop shell, theming, and animation system
@@ -59,8 +61,8 @@ Still ahead:
 | --- | --- | --- |
 | 0 | Foundation | complete |
 | 1 | Native display, input, seat, hotplug | implemented, hardware validation in progress |
-| 2 | Vulkan rendering and scene graph | **in progress** |
-| 3 | Wayland protocol stack | upcoming |
+| 2 | Vulkan rendering and scene graph | complete |
+| 3 | Wayland protocol stack | next |
 | 4 | Tiling window management | upcoming |
 | 5 | Desktop shell and visual system | upcoming |
 | 6 | Ecosystem compatibility | upcoming |

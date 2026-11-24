@@ -2,7 +2,7 @@
 
 > 一个直接运行在 Linux DRM/KMS 之上、使用现代 C++ 从零构建的 Wayland 合成器与平铺窗口管理器。
 
-**状态：Phase 2（画布）· Vulkan 基础起步 · 尚不可日常使用**
+**状态：Phase 2（画布）已完成 · 尚不可日常使用**
 **许可证：Apache-2.0**
 
 powerwm 的目标不是再做一个配置层，而是构建一条完整、可控、可测量的图形栈：
@@ -47,8 +47,8 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `src/platform/seat/`：`libseat` 会话封装，设备打开与 VT enable/disable 事件；DRM 工具可用时走该路径。
 - `src/platform/udev/`：DRM 热插拔 udev monitor。
 - `src/platform/headless/`：headless 输出骨架与提交/翻页计数。
-- `src/render/vulkanpp/`：Vulkan instance、逻辑设备/队列、命令池/命令缓冲、fence、图像/回读缓冲、离屏 clear、DMA-BUF 导出、render pass 与 graphics pipeline。
-- `src/scene/`：节点树、父子关系、事务与 damage 合并基础。
+- `src/render/vulkanpp/`：Vulkan instance、逻辑设备/队列、命令池/命令缓冲、fence、图像/回读缓冲、纹理上传、DMA-BUF 导出与格式/modifier 协商、场景渲染器（圆角、阴影、模糊、变换、裁剪、damage 局部重绘）。
+- `src/scene/`：节点树、样式、父子裁剪、事务与 surface/scene/output damage 合并。
 - `src/platform/gbm/`：早期 `libgbm` 封装，Vulkan 后端落地后评估移除。
 - `src/app/main.cpp`：应用骨架，无参数时打印版本与帮助，不触碰 DRM。
 - `tools/drm_bringup.cpp`：事件驱动 DRM/KMS demo，DRM fd、timerfd、seat dispatch 与 input fd 共用事件循环；双缓冲 page flip 与 VT 暂停/恢复。
@@ -59,8 +59,10 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `tools/vulkan_dmabuf_probe.cpp`：Vulkan DMA-BUF 导出与 KMS framebuffer 导入诊断。
 - `tools/vulkan_kms_demo.cpp`：Vulkan shader 三角形 → DMA-BUF → KMS page flip 演示。
 - `tools/vulkan_pipeline_probe.cpp`：Vulkan render pass / shader / fullscreen triangle 读回探针。
+- `tools/vulkan_compositor.cpp`：事件循环、seat/VT、场景渲染与双缓冲 KMS page flip 合成器演示。
+- `tools/render_benchmark.cpp`：1080p 下 100 个 256×256 动画 surface 的帧预算基准。
 - CMake 目标：`powerwm_core`（静态库）、`powerwm`（应用）、`powerwm_drm_bringup`（工具）、`powerwm_tests`。
-- 当前构建已启用 `-fno-exceptions`；Vulkan 渲染栈与自研 Wayland 协议栈尚未接入，属于 Phase 2/3。
+- 当前构建已启用 `-fno-exceptions`；自研 Wayland 协议栈属于 Phase 3。
 
 > 本次文档基于本地环境验证：GCC 16.2.1、CMake 4.5.1、Ninja 1.13.2、libdrm 2.4.134、GBM 26.3.1。presets `dev`/`release`/`asan` 均已通过构建与冒烟测试。
 

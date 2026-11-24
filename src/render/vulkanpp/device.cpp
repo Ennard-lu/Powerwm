@@ -155,6 +155,10 @@ auto device::native_queue() const noexcept -> void* {
     return queue_;
 }
 
+auto device::native_physical() const noexcept -> void* {
+    return physical_;
+}
+
 auto device::queue_family_index() const noexcept -> u32 {
     return info_.queue_family_index;
 }

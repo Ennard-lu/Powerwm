@@ -32,6 +32,10 @@ class offscreen_target {
 
     [[nodiscard]] auto render(color clear_color) noexcept -> result<void>;
 
+    [[nodiscard]] auto native_image() const noexcept -> void*;
+
+    [[nodiscard]] auto download() noexcept -> result<void>;
+
     [[nodiscard]] auto read_pixel(u32 x, u32 y) const noexcept -> result<color>;
 
     auto destroy() const noexcept -> void;

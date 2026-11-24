@@ -52,13 +52,16 @@ auto run_probe() -> int {
     auto image = pwm::raii{require_value(vk::create_dma_buf_image(device.value(), 64, 64))};
     require_value(image->clear({.red = 0.25F, .green = 0.5F, .blue = 0.75F, .alpha = 1.0F}));
 
+    const pwm::u32 drm_format = image->pixel_format() == vk::dma_buf_pixel_format::rgba8888
+                                    ? drm::format_abgr8888
+                                    : drm::format_xrgb8888;
     auto drm_device = pwm::raii{require_value(drm::device::open_first_available())};
     auto framebuffer = pwm::raii{require_value(drm_device->create_framebuffer_from_dma_buf(
-        image->fd(), image->width_px(), image->height_px(), image->pitch_bytes(),
-        drm::format_xrgb8888, 0))};
+        image->fd(), image->width_px(), image->height_px(), image->pitch_bytes(), drm_format,
+        image->modifier()))};
 
-    std::println("dma-buf fd={} pitch={} framebuffer={}", image->fd(), image->pitch_bytes(),
-                 framebuffer->id());
+    std::println("dma-buf fd={} pitch={} format={:#x} modifier={:#x} framebuffer={}", image->fd(),
+                 image->pitch_bytes(), drm_format, image->modifier(), framebuffer->id());
     return EXIT_SUCCESS;
 }
 

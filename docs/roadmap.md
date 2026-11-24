@@ -1,6 +1,6 @@
 # powerwm roadmap
 
-> Version: 2026-11 (Phase 2)  
+> Version: 2026-11 (Phase 3)
 > Principle: **every phase must be demonstrable, testable, and reversible on its own.**
 
 powerwm is a long build. It is split into eight phases: the first three establish display,
@@ -20,10 +20,10 @@ P0 Foundation ─► P1 Ignition ─► P2 Canvas ─► P3 Protocol ─► P4 O
 | Display | DRM/KMS atomic modeset, page flips, VT pause/resume, hotplug restart |
 | Input | libinput context and probe; not yet routed into the compositor |
 | Session | libseat wrapper, device opening, enable/disable callbacks |
-| Rendering | Vulkan instance/device/queue, command submission, offscreen clear, DMA-BUF export |
-| KMS bridge | Vulkan DMA-BUF imported as KMS framebuffer and presented via page flip |
+| Rendering | Vulkan scene renderer: textures, transforms, clipping, rounded corners, shadows, blur, damage |
+| KMS bridge | Vulkan scene frames presented through DMA-BUF and KMS under the event loop, seat, and VT |
 | Protocol | Not implemented |
-| Tests | CTest smoke, event-loop, headless output |
+| Tests | CTest smoke, event loop, headless output, geometry, scene damage, golden render, frame budget |
 
 ## 2. Phase overview
 
@@ -113,16 +113,25 @@ resource-leak checks. See [phase-1-validation.md](phase-1-validation.md).
 - [x] image, readback buffer, offscreen clear/readback.
 - [x] DMA-BUF export and KMS framebuffer import.
 - [x] Vulkan image presented directly through KMS page flip.
-- [ ] Vulkan → KMS path integrated with the event loop and seat/VT.
+- [x] Vulkan → KMS path integrated with the event loop and seat/VT.
 - [x] Render pass, graphics pipeline, shader modules, fullscreen triangle.
 - [x] Shader triangle rendered into DMA-BUF and presented through KMS.
-- [ ] Textures, transforms, clipping, rounded corners, shadows, blur.
+- [x] Textures, transforms, clipping, rounded corners, shadows, blur.
 - [x] Scene node tree, transactions, and damage accumulation (foundation).
-- [ ] Scene graph rendering integration and surface nodes.
+- [x] Scene graph rendering integration and surface nodes.
 - [x] Geometry/region damage merging and unit tests.
-- [ ] Damage tracking at surface/scene/output levels in the renderer.
-- [ ] DMA-BUF modifier negotiation and format fallback.
-- [ ] Golden-image tests and frame budgets.
+- [x] Damage tracking at surface/scene/output levels in the renderer.
+- [x] DMA-BUF modifier negotiation and format fallback.
+- [x] Golden-image tests and frame budgets.
+
+### Validation
+
+- `powerwm_render_benchmark`: 100 animated 256×256 surfaces at 1920×1080 average
+  3.08 ms per frame submission, maximum 5.66 ms, against a 16.67 ms budget.
+- TTY3 hardware: `powerwm_vulkan_compositor` presented 900 frames across 10 VT
+  switches with seat disable/enable and full redraw recovery.
+- `unit.render`: deterministic golden pixels, partial-damage redraw, and zero
+  steady-state heap allocations across 60 renderer frames.
 
 ### Exit criteria
 
