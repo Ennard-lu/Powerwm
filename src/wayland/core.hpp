@@ -10,6 +10,7 @@
 #include <wayland/wire.hpp>
 
 #include <memory>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -30,6 +31,74 @@ struct surface_commit_event {
 };
 
 using surface_commit_callback = auto (*)(void* context, const surface_commit_event& event) -> void;
+
+struct subsurface_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    object_id surface = 0;
+    object_id parent = 0;
+    i32 x = 0;
+    i32 y = 0;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_set_position(i32 x, i32 y) -> result<void>;
+    [[nodiscard]] auto request_place_above(object_id sibling) -> result<void>;
+    [[nodiscard]] auto request_place_below(object_id sibling) -> result<void>;
+    [[nodiscard]] auto request_set_sync() -> result<void>;
+    [[nodiscard]] auto request_set_desync() -> result<void>;
+};
+
+struct subcompositor_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_get_subsurface(object_id subsurface, object_id surface,
+                                              object_id parent) -> result<void>;
+};
+
+struct data_offer_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_accept(u32 serial, std::string_view mime) -> result<void>;
+    [[nodiscard]] auto request_receive(std::string_view mime, handle_t fd) -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_finish() -> result<void>;
+    [[nodiscard]] auto request_set_actions(u32 source_actions, u32 action) -> result<void>;
+};
+
+struct data_source_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    std::vector<std::string> mime_types;
+    u32 actions = 0;
+
+    [[nodiscard]] auto request_offer(std::string_view mime) -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_set_actions(u32 actions) -> result<void>;
+};
+
+struct data_device_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    object_id seat = 0;
+    object_id selection = 0;
+
+    [[nodiscard]] auto request_start_drag(object_id source, object_id origin, object_id icon,
+                                          u32 serial) -> result<void>;
+    [[nodiscard]] auto request_set_selection(object_id source, u32 serial) -> result<void>;
+    [[nodiscard]] auto request_release() -> result<void>;
+};
+
+struct data_device_manager_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_create_data_source(object_id source) -> result<void>;
+    [[nodiscard]] auto request_get_data_device(object_id device, object_id seat) -> result<void>;
+    [[nodiscard]] auto request_release() -> result<void>;
+};
 
 struct output_object {
     core_protocol* core = nullptr;
@@ -194,6 +263,8 @@ class core_protocol {
 
   private:
     friend struct seat_object;
+    friend struct subcompositor_object;
+    friend struct data_device_manager_object;
 
     [[nodiscard]] auto send_shm_formats(object_id id) -> result<void>;
     [[nodiscard]] auto send_output_events(object_id id, u32 version) -> result<void>;
@@ -219,6 +290,12 @@ class core_protocol {
     std::vector<std::unique_ptr<pointer_object>> pointers_;
     std::vector<std::unique_ptr<keyboard_object>> keyboards_;
     std::vector<std::unique_ptr<touch_object>> touches_;
+    std::vector<std::unique_ptr<subcompositor_object>> subcompositors_;
+    std::vector<std::unique_ptr<subsurface_object>> subsurfaces_;
+    std::vector<std::unique_ptr<data_device_manager_object>> data_managers_;
+    std::vector<std::unique_ptr<data_device_object>> data_devices_;
+    std::vector<std::unique_ptr<data_source_object>> data_sources_;
+    std::vector<std::unique_ptr<data_offer_object>> data_offers_;
     std::vector<object_id> pointer_ids_;
     std::vector<object_id> keyboard_ids_;
     std::vector<object_id> touch_ids_;

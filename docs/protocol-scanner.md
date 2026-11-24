@@ -142,5 +142,9 @@ atomic page flips. Keyboard keymap and key/modifier events are forwarded through
 `wl_keyboard`; pointer enter/leave/motion/button/axis/frame and touch
 down/up/motion/frame events use scene hit testing.
 
-Client-id lifetime, pointer/touch input routing, clipboard/DnD, linux-dmabuf, coroutine
-sessions, and real external client validation are the next Phase 3 steps.
+A GTK4 test client now connects through the KMS compositor, creates surfaces, and commits
+a shm window. `wl_subcompositor` and `wl_data_device_manager` object skeletons are
+available; full clipboard/DnD transfer is still pending.
+
+Client-id lifetime, complete clipboard/DnD, linux-dmabuf, xdg-output/viewporter,
+coroutine sessions, and broader real-client validation are the next Phase 3 steps.

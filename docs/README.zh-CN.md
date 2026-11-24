@@ -65,7 +65,7 @@ powerwm 的目标不是再做一个配置层，而是构建一条完整、可控
 - `tools/render_benchmark.cpp`：1080p 下 100 个 256×256 动画 surface 的帧预算基准。
 - `tools/protocol_scanner.cpp`：扫描协议 XML，生成接口描述、消息编解码与反射处理函数名。
 - `tools/wayland_server.cpp`：事件循环驱动的 Unix socket Wayland 协议服务器。
-- `tools/wayland_kms_compositor.cpp`：协议客户端 shm surface → Vulkan → DMA-BUF → KMS 合成器，含键盘、指针、触摸事件与场景命中测试。
+- `tools/wayland_kms_compositor.cpp`：协议客户端 shm surface → Vulkan → DMA-BUF → KMS 合成器，含键盘、指针、触摸事件、场景命中测试，并已通过真实 GTK4 客户端窗口验证。
 - CMake 目标：`powerwm_core`（静态库）、`powerwm`（应用）、`powerwm_drm_bringup`（工具）、`powerwm_tests`。
 - 当前构建已启用 `-fno-exceptions`；Wayland 协议层已进入 Phase 3，socket、对象表与协程会话仍在实现中。
 

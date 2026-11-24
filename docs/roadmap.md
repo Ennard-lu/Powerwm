@@ -170,11 +170,14 @@ libwayland.
 - [x] pointer enter, leave, motion, button, axis, and frame delivery;
 - [x] touch down, up, motion, and frame delivery;
 - [x] protocol surfaces uploaded to Vulkan textures and presented through KMS;
+- [x] `wl_subcompositor` and `wl_data_device_manager` object skeletons;
+- [x] GTK4 Wayland client connects and commits a shm window;
+- [ ] complete clipboard/DnD data transfer;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [x] in-tree socket handshake and raw-wire client verification;
 - [x] in-tree socket handshake, shm surface commit, and KMS presentation;
-- [ ] real external client handshake and wire fuzzing.
+- [ ] broader real-client matrix (GTK, Qt, foot) and wire fuzzing.
 
 Exit: handshake with real libwayland clients; fd stress test; protocol errors do not
 crash; 24-hour fuzz; no `libwayland-*` in `ldd`.

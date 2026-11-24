@@ -30,9 +30,11 @@ auto display_service::add_global(std::string_view interface, u32 version) -> u32
 auto display_service::advertise_core(u32 output_width, u32 output_height, u32 refresh_hz) -> void {
     core_.configure_output(output_width, output_height, refresh_hz);
     add_global("wl_compositor", 4);
+    add_global("wl_subcompositor", 1);
     add_global("wl_shm", 1);
     add_global("wl_output", 4);
     add_global("wl_seat", 2);
+    add_global("wl_data_device_manager", 3);
     add_global("xdg_wm_base", 1);
 }
 

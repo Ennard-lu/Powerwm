@@ -68,6 +68,10 @@ pre-1.0 `0.x.y` convention.
 - Touch down/up/motion/frame events and libinput touch forwarding.
 - Surface-scene bridge: shm commits upload strided BGRA/RGBA textures into scene nodes
   and render through the Vulkan scene renderer.
+- `wl_subcompositor`/`wl_subsurface` and `wl_data_device_manager`/data source/device/
+  offer object skeletons.
+- Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
+  shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,
   `powerwm_input_probe`, `powerwm_seat_probe`, `powerwm_vulkan_pipeline_probe`.
 

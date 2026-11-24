@@ -86,6 +86,123 @@ auto seat_object::request_release() -> result<void> {
     return core->service().destroy_object(id);
 }
 
+auto subsurface_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto subsurface_object::request_set_position(i32 new_x, i32 new_y) -> result<void> {
+    x = new_x;
+    y = new_y;
+    return {};
+}
+
+auto subsurface_object::request_place_above(object_id sibling) -> result<void> {
+    static_cast<void>(sibling);
+    return {};
+}
+
+auto subsurface_object::request_place_below(object_id sibling) -> result<void> {
+    static_cast<void>(sibling);
+    return {};
+}
+
+auto subsurface_object::request_set_sync() -> result<void> {
+    return {};
+}
+
+auto subsurface_object::request_set_desync() -> result<void> {
+    return {};
+}
+
+auto subcompositor_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto subcompositor_object::request_get_subsurface(object_id subsurface, object_id surface,
+                                                  object_id parent) -> result<void> {
+    auto* object =
+        core->store(core->subsurfaces_, subsurface_object{core, subsurface, surface, parent});
+    return add_object<subsurface_object, generated::wl_subsurface>(
+        core->service().connection_ref().objects(), subsurface, *object);
+}
+
+auto data_offer_object::request_accept(u32 serial, std::string_view mime) -> result<void> {
+    static_cast<void>(serial);
+    static_cast<void>(mime);
+    return {};
+}
+
+auto data_offer_object::request_receive(std::string_view mime, handle_t fd) -> result<void> {
+    static_cast<void>(mime);
+    auto owned = platform::wayland::file_descriptor::adopt(fd);
+    static_cast<void>(owned);
+    return {};
+}
+
+auto data_offer_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto data_offer_object::request_finish() -> result<void> {
+    return {};
+}
+
+auto data_offer_object::request_set_actions(u32 source_actions, u32 action) -> result<void> {
+    static_cast<void>(source_actions);
+    static_cast<void>(action);
+    return {};
+}
+
+auto data_source_object::request_offer(std::string_view mime) -> result<void> {
+    mime_types.emplace_back(mime);
+    return {};
+}
+
+auto data_source_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto data_source_object::request_set_actions(u32 value) -> result<void> {
+    actions = value;
+    return {};
+}
+
+auto data_device_object::request_start_drag(object_id source, object_id origin, object_id icon,
+                                            u32 serial) -> result<void> {
+    static_cast<void>(source);
+    static_cast<void>(origin);
+    static_cast<void>(icon);
+    static_cast<void>(serial);
+    return {};
+}
+
+auto data_device_object::request_set_selection(object_id source, u32 serial) -> result<void> {
+    static_cast<void>(serial);
+    selection = source;
+    return {};
+}
+
+auto data_device_object::request_release() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto data_device_manager_object::request_create_data_source(object_id source) -> result<void> {
+    auto* object = core->store(core->data_sources_, data_source_object{core, source});
+    return add_object<data_source_object, generated::wl_data_source>(
+        core->service().connection_ref().objects(), source, *object);
+}
+
+auto data_device_manager_object::request_get_data_device(object_id device, object_id seat)
+    -> result<void> {
+    auto* object = core->store(core->data_devices_, data_device_object{core, device, seat});
+    return add_object<data_device_object, generated::wl_data_device>(
+        core->service().connection_ref().objects(), device, *object);
+}
+
+auto data_device_manager_object::request_release() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
 auto compositor_object::request_create_surface(object_id surface) -> result<void> {
     return core->create_surface(surface);
 }
@@ -252,6 +369,16 @@ core_protocol::core_protocol(display_service& service) noexcept : service_(&serv
 auto core_protocol::bind_global(std::string_view interface, object_id id, u32 version)
     -> result<void> {
     static_cast<void>(version);
+    if (interface == generated::wl_subcompositor::name) {
+        auto* object = store(subcompositors_, subcompositor_object{this, id});
+        return add_object<subcompositor_object, generated::wl_subcompositor>(
+            service_->connection_ref().objects(), id, *object);
+    }
+    if (interface == generated::wl_data_device_manager::name) {
+        auto* object = store(data_managers_, data_device_manager_object{this, id});
+        return add_object<data_device_manager_object, generated::wl_data_device_manager>(
+            service_->connection_ref().objects(), id, *object);
+    }
     if (interface == generated::wl_output::name) {
         return create_output(id, version);
     }
