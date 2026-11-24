@@ -3,6 +3,7 @@
 #include <base/raii.hpp>
 #include <base/result.hpp>
 #include <render/vulkanpp/device.hpp>
+#include <render/vulkanpp/dma_buf_image.hpp>
 #include <render/vulkanpp/instance.hpp>
 #include <render/vulkanpp/offscreen.hpp>
 #include <render/vulkanpp/scene_renderer.hpp>
@@ -535,7 +536,96 @@ auto run_budget_test() -> int {
 
 }
 
+auto run_dma_buf_scene_test() -> int {
+    fixture context;
+    if (auto created = create_fixture(context); !created) {
+        std::println(stderr, "DMA-BUF scene fixture failed: {}", created.error().message);
+        return EXIT_FAILURE;
+    }
+    if (!context.device->supports_dma_buf()) {
+        std::println("DMA-BUF scene skipped: export is unavailable");
+        return EXIT_SUCCESS;
+    }
+    auto image_result = vk::create_dma_buf_image(context.device.value(), 32, 32);
+    if (!image_result) {
+        std::println(stderr, "DMA-BUF scene export failed: {}", image_result.error().message);
+        return EXIT_FAILURE;
+    }
+    const auto image = std::move(*image_result);
+    const pwm::u32 fourcc =
+        image.pixel_format() == vk::dma_buf_pixel_format::bgra8888 ? 0x34325241 : 0x34324241;
+    pwm::wayland::surface_scene scene{context.device.value(), 640, 480};
+    const pwm::wayland::surface_commit_event event{
+        .surface = 7,
+        .buffer = 4,
+        .width = 32,
+        .height = 32,
+        .stride = static_cast<pwm::i32>(image.pitch_bytes()),
+        .format = fourcc,
+        .is_dmabuf = true,
+        .fd = image.fd(),
+        .modifier = image.modifier(),
+    };
+    const pwm::u64 key = (1ULL << 32U) | 7U;
+    if (auto committed = scene.on_commit(key, event); !committed) {
+        std::println(stderr, "DMA-BUF scene commit failed: {}", committed.error().message);
+        return EXIT_FAILURE;
+    }
+    const auto bounds = scene.surface_bounds(key);
+    if (!bounds || bounds->width != 32 || bounds->height != 32) {
+        std::println(stderr, "DMA-BUF scene bounds are invalid");
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
+
+auto run_dma_buf_import_test() -> int {
+    fixture context;
+    if (auto created = create_fixture(context); !created) {
+        std::println(stderr, "DMA-BUF import fixture failed: {}", created.error().message);
+        return EXIT_FAILURE;
+    }
+    if (!context.device->supports_dma_buf()) {
+        std::println("DMA-BUF import skipped: export is unavailable");
+        return EXIT_SUCCESS;
+    }
+    auto image_result = vk::create_dma_buf_image(context.device.value(), 64, 64);
+    if (!image_result) {
+        std::println(stderr, "DMA-BUF export failed: {}", image_result.error().message);
+        return EXIT_FAILURE;
+    }
+    const auto image = std::move(*image_result);
+    const pwm::u32 fourcc =
+        image.pixel_format() == vk::dma_buf_pixel_format::bgra8888 ? 0x34325241 : 0x34324241;
+    auto texture_result =
+        vk::create_dma_buf_texture(context.device.value(), {.fd = image.fd(),
+                                                            .width_px = 64,
+                                                            .height_px = 64,
+                                                            .stride_bytes = image.pitch_bytes(),
+                                                            .fourcc = fourcc,
+                                                            .modifier = image.modifier()});
+    if (!texture_result) {
+        std::println(stderr, "DMA-BUF import failed: {}", texture_result.error().message);
+        return EXIT_FAILURE;
+    }
+    if (!texture_result->valid() || texture_result->width_px() != 64 ||
+        texture_result->height_px() != 64) {
+        std::println(stderr, "DMA-BUF import returned an invalid texture");
+        return EXIT_FAILURE;
+    }
+    std::println("DMA-BUF import modifier {:#x}", image.modifier());
+    return EXIT_SUCCESS;
+}
+
 int main() {
+    const int dma_buf_scene = run_dma_buf_scene_test();
+    if (dma_buf_scene != EXIT_SUCCESS) {
+        return dma_buf_scene;
+    }
+    const int dma_buf = run_dma_buf_import_test();
+    if (dma_buf != EXIT_SUCCESS) {
+        return dma_buf;
+    }
     const int golden = run_golden_test();
     if (golden != EXIT_SUCCESS) {
         return golden;

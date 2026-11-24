@@ -5,6 +5,8 @@
 #include <render/vulkanpp/fence.hpp>
 #include <render/vulkanpp/texture.hpp>
 
+#include <unistd.h>
+
 #include <cstring>
 #include <utility>
 #include <vulkan/vulkan.h>
@@ -307,6 +309,271 @@ auto upload_pixels(const device& device, void* image_handle, bool initialized, u
     return {};
 }
 
+auto fourcc_to_vk_format(u32 fourcc) -> VkFormat {
+    constexpr u32 argb8888 = 0x34325241;
+    constexpr u32 xrgb8888 = 0x34325258;
+    constexpr u32 abgr8888 = 0x34324241;
+    constexpr u32 xbgr8888 = 0x34324258;
+    switch (fourcc) {
+    case argb8888:
+    case xrgb8888:
+        return VK_FORMAT_B8G8R8A8_UNORM;
+    case abgr8888:
+    case xbgr8888:
+        return VK_FORMAT_R8G8B8A8_UNORM;
+    default:
+        return VK_FORMAT_UNDEFINED;
+    }
+}
+
+auto create_imported_image(const device& device, u32 width_px, u32 height_px, VkFormat format,
+                           u64 modifier) -> result<VkImage> {
+    const VkDevice native_device = reinterpret_cast<VkDevice>(device.native_handle());
+    const bool uses_modifier =
+        vkGetDeviceProcAddr(native_device, "vkGetImageDrmFormatModifierPropertiesEXT") != nullptr;
+
+    VkImageDrmFormatModifierListCreateInfoEXT modifier_info{};
+    modifier_info.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT;
+    modifier_info.drmFormatModifierCount = 1;
+    modifier_info.pDrmFormatModifiers = &modifier;
+
+    VkExternalMemoryImageCreateInfo external_info{};
+    external_info.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+    external_info.pNext = uses_modifier ? &modifier_info : nullptr;
+    external_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+
+    VkImageCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    create_info.pNext = &external_info;
+    create_info.imageType = VK_IMAGE_TYPE_2D;
+    create_info.format = format;
+    create_info.extent = {width_px, height_px, 1};
+    create_info.mipLevels = 1;
+    create_info.arrayLayers = 1;
+    create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    create_info.tiling =
+        uses_modifier ? VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT : VK_IMAGE_TILING_LINEAR;
+    create_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    if (!uses_modifier && modifier != 0) {
+        return std::unexpected(
+            make_error(error_code::unsupported, "DRM format modifiers are unavailable"));
+    }
+
+    VkImage image = VK_NULL_HANDLE;
+    const VkResult result = vkCreateImage(native_device, &create_info, nullptr, &image);
+    if (result != VK_SUCCESS) {
+        return std::unexpected(make_error(error_code::io, "vkCreateImage failed",
+                                          std::source_location::current(),
+                                          static_cast<i32>(result)));
+    }
+    return image;
+}
+
+auto import_image_memory(const device& device, VkImage image, handle_t fd)
+    -> result<VkDeviceMemory> {
+    const VkDevice native_device = reinterpret_cast<VkDevice>(device.native_handle());
+    const auto get_fd_properties = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(
+        vkGetDeviceProcAddr(native_device, "vkGetMemoryFdPropertiesKHR"));
+    if (get_fd_properties == nullptr) {
+        return std::unexpected(
+            make_error(error_code::unsupported, "vkGetMemoryFdPropertiesKHR is unavailable"));
+    }
+    const handle_t owned = ::dup(fd);
+    if (owned < 0) {
+        return std::unexpected(
+            make_error(error_code::io, "dup failed", std::source_location::current(), errno));
+    }
+
+    VkMemoryFdPropertiesKHR fd_properties{};
+    fd_properties.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
+    VkResult result = get_fd_properties(
+        native_device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, owned, &fd_properties);
+    if (result != VK_SUCCESS) {
+        ::close(owned);
+        return std::unexpected(make_error(error_code::io, "vkGetMemoryFdPropertiesKHR failed",
+                                          std::source_location::current(),
+                                          static_cast<i32>(result)));
+    }
+
+    VkMemoryRequirements requirements{};
+    vkGetImageMemoryRequirements(native_device, image, &requirements);
+    const u32 candidates = requirements.memoryTypeBits & fd_properties.memoryTypeBits;
+    if (candidates == 0) {
+        ::close(owned);
+        return std::unexpected(
+            make_error(error_code::unsupported, "no memory type accepts the DMA-BUF"));
+    }
+
+    VkPhysicalDeviceMemoryProperties memory_properties{};
+    vkGetPhysicalDeviceMemoryProperties(
+        reinterpret_cast<VkPhysicalDevice>(device.native_physical()), &memory_properties);
+    u32 memory_type = UINT32_MAX;
+    for (u32 index = 0; index < memory_properties.memoryTypeCount; ++index) {
+        if ((candidates & (1U << index)) == 0) {
+            continue;
+        }
+        if (memory_type == UINT32_MAX) {
+            memory_type = index;
+        }
+        if ((memory_properties.memoryTypes[index].propertyFlags &
+             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0) {
+            memory_type = index;
+            break;
+        }
+    }
+    if (memory_type == UINT32_MAX) {
+        ::close(owned);
+        return std::unexpected(
+            make_error(error_code::unsupported, "DMA-BUF memory type is invalid"));
+    }
+
+    VkMemoryDedicatedAllocateInfo dedicated_info{};
+    dedicated_info.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+    dedicated_info.image = image;
+
+    VkImportMemoryFdInfoKHR import_info{};
+    import_info.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
+    import_info.pNext = &dedicated_info;
+    import_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+    import_info.fd = owned;
+
+    VkMemoryAllocateInfo allocate_info{};
+    allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocate_info.pNext = &import_info;
+    allocate_info.allocationSize = requirements.size;
+    allocate_info.memoryTypeIndex = memory_type;
+
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    result = vkAllocateMemory(native_device, &allocate_info, nullptr, &memory);
+    if (result != VK_SUCCESS) {
+        ::close(owned);
+        return std::unexpected(make_error(error_code::resource_exhausted, "vkAllocateMemory failed",
+                                          std::source_location::current(),
+                                          static_cast<i32>(result)));
+    }
+    return memory;
+}
+
+auto transition_to_sampled(const device& device, VkImage image) -> result<void> {
+    auto pool_result = create_command_pool(device);
+    if (!pool_result) {
+        return std::unexpected(pool_result.error());
+    }
+    auto pool = raii{std::move(*pool_result)};
+    auto command_result = pool->allocate();
+    if (!command_result) {
+        return std::unexpected(command_result.error());
+    }
+    auto command = raii{std::move(*command_result)};
+    auto fence_result = create_fence(device, false);
+    if (!fence_result) {
+        return std::unexpected(fence_result.error());
+    }
+    auto fence = raii{std::move(*fence_result)};
+    if (auto reset = fence->reset(); !reset) {
+        return std::unexpected(reset.error());
+    }
+    if (auto begun = command->begin(); !begun) {
+        return std::unexpected(begun.error());
+    }
+
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(reinterpret_cast<VkCommandBuffer>(command->native_handle()),
+                         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    if (auto ended = command->end(); !ended) {
+        return std::unexpected(ended.error());
+    }
+    if (auto submitted = submit(device, command.value(), fence.value()); !submitted) {
+        return std::unexpected(submitted.error());
+    }
+    return fence->wait(1000000000);
+}
+
+}
+
+auto create_dma_buf_texture(const device& device, const dma_buf_texture_data& data) noexcept
+    -> result<texture> {
+    if (!device.supports_dma_buf()) {
+        return std::unexpected(
+            make_error(error_code::unsupported, "Vulkan DMA-BUF import is unavailable"));
+    }
+    if (data.fd < 0 || data.width_px == 0 || data.height_px == 0) {
+        return std::unexpected(
+            make_error(error_code::invalid_argument, "DMA-BUF texture arguments are invalid"));
+    }
+    const VkFormat format = fourcc_to_vk_format(data.fourcc);
+    if (format == VK_FORMAT_UNDEFINED) {
+        return std::unexpected(
+            make_error(error_code::unsupported, "DMA-BUF fourcc is unsupported"));
+    }
+
+    const VkDevice native_device = reinterpret_cast<VkDevice>(device.native_handle());
+    auto image_result =
+        create_imported_image(device, data.width_px, data.height_px, format, data.modifier);
+    if (!image_result) {
+        return std::unexpected(image_result.error());
+    }
+    const VkImage image = *image_result;
+
+    auto memory_result = import_image_memory(device, image, data.fd);
+    if (!memory_result) {
+        vkDestroyImage(native_device, image, nullptr);
+        return std::unexpected(memory_result.error());
+    }
+    const VkDeviceMemory memory = *memory_result;
+
+    if (vkBindImageMemory(native_device, image, memory, 0) != VK_SUCCESS) {
+        vkFreeMemory(native_device, memory, nullptr);
+        vkDestroyImage(native_device, image, nullptr);
+        return std::unexpected(make_error(error_code::io, "vkBindImageMemory failed"));
+    }
+
+    auto view_result = create_view(native_device, image, format);
+    if (!view_result) {
+        vkFreeMemory(native_device, memory, nullptr);
+        vkDestroyImage(native_device, image, nullptr);
+        return std::unexpected(view_result.error());
+    }
+    auto sampler_result = create_sampler(native_device);
+    if (!sampler_result) {
+        vkDestroyImageView(native_device, *view_result, nullptr);
+        vkFreeMemory(native_device, memory, nullptr);
+        vkDestroyImage(native_device, image, nullptr);
+        return std::unexpected(sampler_result.error());
+    }
+
+    if (auto transitioned = transition_to_sampled(device, image); !transitioned) {
+        vkDestroySampler(native_device, *sampler_result, nullptr);
+        vkDestroyImageView(native_device, *view_result, nullptr);
+        vkFreeMemory(native_device, memory, nullptr);
+        vkDestroyImage(native_device, image, nullptr);
+        return std::unexpected(transitioned.error());
+    }
+
+    const texture_format texture_format_value =
+        format == VK_FORMAT_B8G8R8A8_UNORM ? texture_format::bgra8 : texture_format::rgba8;
+    return texture{&device, image,         memory,         *view_result,        *sampler_result,
+                   true,    data.width_px, data.height_px, texture_format_value};
 }
 
 auto create_texture(const device& device, u32 width_px, u32 height_px,

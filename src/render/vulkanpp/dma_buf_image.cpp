@@ -148,6 +148,16 @@ auto select_external_format(const device& device, VkFormat format,
         reinterpret_cast<PFN_vkGetImageDrmFormatModifierPropertiesEXT>(
             vkGetDeviceProcAddr(native_device, "vkGetImageDrmFormatModifierPropertiesEXT"));
 
+    if (supports_external_format(physical, format, VK_IMAGE_TILING_LINEAR, false, 0)) {
+        return external_format{
+            .format = format,
+            .pixel_format = pixel_format,
+            .tiling = VK_IMAGE_TILING_LINEAR,
+            .modifier = 0,
+            .uses_modifier = false,
+        };
+    }
+
     if (get_modifier_properties != nullptr) {
         const u64 modifier = find_modifier(physical, format);
         if (supports_external_format(physical, format, VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT,
@@ -160,16 +170,6 @@ auto select_external_format(const device& device, VkFormat format,
                 .uses_modifier = true,
             };
         }
-    }
-
-    if (supports_external_format(physical, format, VK_IMAGE_TILING_LINEAR, false, 0)) {
-        return external_format{
-            .format = format,
-            .pixel_format = pixel_format,
-            .tiling = VK_IMAGE_TILING_LINEAR,
-            .modifier = 0,
-            .uses_modifier = false,
-        };
     }
     return {};
 }

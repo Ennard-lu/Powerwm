@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstring>
 #include <fractional_scale_bindings.hpp>
+#include <linux_dmabuf_bindings.hpp>
 #include <presentation_time_bindings.hpp>
 #include <string_view>
 #include <tuple>
@@ -31,6 +32,81 @@ auto valid_buffer_size(const shm_pool_object& pool, i32 offset, i32 width, i32 h
     return end <= pool.size;
 }
 
+}
+
+auto linux_buffer_params_object::request_destroy() -> result<void> {
+    fd.destroy();
+    return core->service().destroy_object(id);
+}
+
+auto linux_buffer_params_object::request_add(handle_t fd, u32 plane, u32 offset, u32 stride,
+                                             u32 modifier_hi, u32 modifier_lo) -> result<void> {
+    if (plane != 0 || this->fd.valid()) {
+        return std::unexpected(
+            make_error(error_code::protocol, "only a single DMA-BUF plane is supported"));
+    }
+    if (offset > stride) {
+        return std::unexpected(make_error(error_code::protocol, "DMA-BUF offset is invalid"));
+    }
+    this->fd = platform::wayland::file_descriptor::adopt(fd);
+    this->offset = offset;
+    this->stride = stride;
+    modifier = (static_cast<u64>(modifier_hi) << 32U) | static_cast<u64>(modifier_lo);
+    plane_count = 1;
+    return {};
+}
+
+auto linux_buffer_params_object::request_create(i32 width, i32 height, u32 format, u32 flags)
+    -> result<void> {
+    static_cast<void>(flags);
+    if (!fd.valid() || width <= 0 || height <= 0) {
+        return core->send_linux_buffer_failed(id);
+    }
+    const object_id buffer = core->allocate_server_object_id();
+    auto created = core->create_dmabuf_buffer(buffer, std::move(fd), width, height, stride, format,
+                                              modifier, true);
+    if (!created) {
+        return core->send_linux_buffer_failed(id);
+    }
+    return core->send_linux_buffer_created(id, buffer);
+}
+
+auto linux_buffer_params_object::request_create_immed(object_id buffer, i32 width, i32 height,
+                                                      u32 format, u32 flags) -> result<void> {
+    static_cast<void>(flags);
+    if (!fd.valid() || width <= 0 || height <= 0) {
+        return core->send_linux_buffer_failed(id);
+    }
+    return core->create_dmabuf_buffer(buffer, std::move(fd), width, height, stride, format,
+                                      modifier, false);
+}
+
+auto linux_buffer_params_object::request_set_sampling_device(std::span<const std::byte> device)
+    -> result<void> {
+    static_cast<void>(device);
+    return {};
+}
+
+auto linux_dmabuf_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto linux_dmabuf_object::request_create_params(object_id params) -> result<void> {
+    return core->create_linux_buffer_params(params);
+}
+
+auto linux_dmabuf_object::request_get_default_feedback(object_id feedback) -> result<void> {
+    static_cast<void>(feedback);
+    return std::unexpected(
+        make_error(error_code::unsupported, "DMA-BUF feedback is not supported"));
+}
+
+auto linux_dmabuf_object::request_get_surface_feedback(object_id feedback, object_id surface)
+    -> result<void> {
+    static_cast<void>(feedback);
+    static_cast<void>(surface);
+    return std::unexpected(
+        make_error(error_code::unsupported, "DMA-BUF feedback is not supported"));
 }
 
 auto output_object::request_release() -> result<void> {
@@ -490,6 +566,10 @@ auto region_object::request_destroy() -> result<void> {
 }
 
 auto buffer_object::request_destroy() -> result<void> {
+    if (server_created) {
+        core->service().connection_ref().objects().remove(id);
+        return {};
+    }
     return core->service().destroy_object(id);
 }
 
@@ -570,15 +650,24 @@ auto surface_object::request_commit() -> result<void> {
         if (committed == nullptr) {
             return std::unexpected(make_error(error_code::protocol, "surface buffer is unknown"));
         }
-        auto committed_pixels = core->buffer_pixels(buffer);
-        if (!committed_pixels) {
-            return std::unexpected(committed_pixels.error());
+        std::span<const std::byte> committed_pixels;
+        if (!committed->is_dmabuf) {
+            auto pixels = core->buffer_pixels(buffer);
+            if (!pixels) {
+                return std::unexpected(pixels.error());
+            }
+            committed_pixels = *pixels;
         }
         event.width = committed->width;
         event.height = committed->height;
         event.stride = committed->stride;
         event.format = committed->format;
-        event.pixels = *committed_pixels;
+        event.pixels = committed_pixels;
+        if (committed->is_dmabuf) {
+            event.is_dmabuf = true;
+            event.fd = committed->dmabuf_fd.fd();
+            event.modifier = committed->modifier;
+        }
     }
     core->notify_commit(event);
 
@@ -673,6 +762,43 @@ auto core_protocol::bind_global(std::string_view interface, object_id id, u32 ve
         return add_object<subcompositor_object, generated::wl_subcompositor>(
             service_->connection_ref().objects(), id, *object);
     }
+    if (interface == generated::zwp_linux_dmabuf_v1::name) {
+        auto* object = store(linux_dmabufs_, linux_dmabuf_object{this, id, version});
+        if (auto added = add_object<linux_dmabuf_object, generated::zwp_linux_dmabuf_v1>(
+                service_->connection_ref().objects(), id, *object);
+            !added) {
+            return std::unexpected(added.error());
+        }
+        constexpr u32 argb8888 = 0x34325241;
+        constexpr u32 xrgb8888 = 0x34325258;
+        for (const u32 format : {argb8888, xrgb8888}) {
+            generated::zwp_linux_dmabuf_v1::event_format event{};
+            std::get<0>(event.arguments) = format;
+            protocol_writer writer;
+            if (auto encoded =
+                    generated::zwp_linux_dmabuf_v1::event_format::encode(writer, id, event);
+                !encoded) {
+                return std::unexpected(encoded.error());
+            }
+            if (auto queued = service_->queue_event(writer); !queued) {
+                return std::unexpected(queued.error());
+            }
+        }
+        if (version >= 3) {
+            generated::zwp_linux_dmabuf_v1::event_modifier event{};
+            std::get<0>(event.arguments) = 0;
+            std::get<1>(event.arguments) = 0;
+            std::get<2>(event.arguments) = 0;
+            protocol_writer writer;
+            if (auto encoded =
+                    generated::zwp_linux_dmabuf_v1::event_modifier::encode(writer, id, event);
+                !encoded) {
+                return std::unexpected(encoded.error());
+            }
+            return service_->queue_event(writer);
+        }
+        return {};
+    }
     if (interface == generated::wl_data_device_manager::name) {
         auto* object = store(data_managers_, data_device_manager_object{this, id});
         return add_object<data_device_manager_object, generated::wl_data_device_manager>(
@@ -753,6 +879,56 @@ auto core_protocol::create_pool(object_id id, handle_t fd, i32 size) -> result<v
         store(pools_, shm_pool_object{this, id, std::move(owned), size, std::move(*mapping)});
     return add_object<shm_pool_object, generated::wl_shm_pool>(service_->connection_ref().objects(),
                                                                id, *object);
+}
+
+auto core_protocol::allocate_server_object_id() noexcept -> object_id {
+    return next_server_id_++;
+}
+
+auto core_protocol::create_linux_buffer_params(object_id id) -> result<void> {
+    auto* object = store(linux_buffer_params_, linux_buffer_params_object{this, id});
+    return add_object<linux_buffer_params_object, generated::zwp_linux_buffer_params_v1>(
+        service_->connection_ref().objects(), id, *object);
+}
+
+auto core_protocol::send_linux_buffer_created(object_id params, object_id buffer) -> result<void> {
+    generated::zwp_linux_buffer_params_v1::event_created event{};
+    std::get<0>(event.arguments) = buffer;
+    protocol_writer writer;
+    if (auto encoded =
+            generated::zwp_linux_buffer_params_v1::event_created::encode(writer, params, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return service_->queue_event(writer);
+}
+
+auto core_protocol::send_linux_buffer_failed(object_id params) -> result<void> {
+    generated::zwp_linux_buffer_params_v1::event_failed event{};
+    protocol_writer writer;
+    if (auto encoded =
+            generated::zwp_linux_buffer_params_v1::event_failed::encode(writer, params, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return service_->queue_event(writer);
+}
+
+auto core_protocol::create_dmabuf_buffer(object_id id, platform::wayland::file_descriptor fd,
+                                         i32 width, i32 height, u32 stride, u32 format,
+                                         u64 modifier, bool server_created) -> result<void> {
+    if (width <= 0 || height <= 0 || stride < static_cast<u32>(width) * 4) {
+        return std::unexpected(
+            make_error(error_code::invalid_argument, "DMA-BUF dimensions are invalid"));
+    }
+    auto* object = store(
+        buffers_, buffer_object{this, id, 0, 0, width, height, static_cast<i32>(stride), format});
+    object->is_dmabuf = true;
+    object->server_created = server_created;
+    object->dmabuf_fd = std::move(fd);
+    object->modifier = modifier;
+    return add_object<buffer_object, generated::wl_buffer>(service_->connection_ref().objects(), id,
+                                                           *object);
 }
 
 auto core_protocol::create_buffer(object_id id, object_id pool, i32 offset, i32 width, i32 height,

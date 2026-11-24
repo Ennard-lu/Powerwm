@@ -144,8 +144,8 @@ auto on_client_commit(void* context, const wayland::surface_commit_event& commit
         std::println(stderr, "client {} commit error: {}", session.index, applied.error().message);
         return;
     }
-    std::println("client {} surface {} committed {}x{}", session.index, commit.surface,
-                 commit.width, commit.height);
+    std::println("client {} surface {} committed {}x{}{}", session.index, commit.surface,
+                 commit.width, commit.height, commit.is_dmabuf ? " dmabuf" : " shm");
     static_cast<void>(session.display.send_keyboard_enter(commit.surface));
     static_cast<void>(session.connection.flush());
 }

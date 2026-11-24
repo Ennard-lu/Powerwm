@@ -43,6 +43,7 @@ auto display_service::advertise_core(u32 output_width, u32 output_height, u32 re
     add_global("xdg_activation_v1", 1);
     add_global("wl_seat", 2);
     add_global("wl_data_device_manager", 3);
+    add_global("zwp_linux_dmabuf_v1", 3);
     add_global("xdg_wm_base", 1);
 }
 

@@ -95,6 +95,8 @@ auto device::create(const instance& instance) noexcept -> result<device> {
             has_extension(extensions, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
         const bool has_dma_buf =
             has_extension(extensions, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+        const bool has_drm_modifier =
+            has_extension(extensions, VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
 
         std::vector<const char*> enabled_extensions;
         if (has_external_memory) {
@@ -105,6 +107,9 @@ auto device::create(const instance& instance) noexcept -> result<device> {
         }
         if (has_dma_buf) {
             enabled_extensions.push_back(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+        }
+        if (has_drm_modifier) {
+            enabled_extensions.push_back(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
         }
 
         VkDeviceCreateInfo create_info{};

@@ -148,7 +148,9 @@ available; `zxdg_output_manager_v1` provides logical output geometry and metadat
 GTK-style clients. Viewporter, fractional scaling, xdg-decoration, xdg-activation, and
 presentation feedback is deferred to the next KMS page flip. The KMS compositor brokers
 cross-client clipboard selection, mime offers, and fd transfer, and tracks drag-and-drop
-targets with enter, motion, drop, action, and finish events.
+targets with enter, motion, drop, action, and finish events. `linux-dmabuf-v1` exposes
+ARGB8888/XRGB8888 with the linear modifier and imports client buffers into Vulkan
+textures.
 
 Client-id lifetime, drag-and-drop, linux-dmabuf, layer-shell, coroutine sessions, and
 broader real-client validation are the next Phase 3 steps.

@@ -82,6 +82,9 @@ pre-1.0 `0.x.y` convention.
   descriptor forwarding between clients.
 - Drag-and-drop: `start_drag` tracking, data-device `data_offer`/`enter`/`motion`/`drop`
   events, offer actions, `dnd_drop_performed`, `dnd_finished`, and cancellation.
+- `linux-dmabuf-v1`: format and linear-modifier advertisement, single-plane buffer
+  params, immediate and deferred buffer creation, and Vulkan DMA-BUF import for surface
+  rendering.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

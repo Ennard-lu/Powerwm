@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fractional_scale_bindings.hpp>
+#include <linux_dmabuf_bindings.hpp>
 #include <presentation_time_bindings.hpp>
 #include <print>
 #include <span>
@@ -2037,6 +2038,127 @@ auto test_drag_transfer() -> bool {
     return actions == 1 && drops == 1 && finishes == 1;
 }
 
+auto test_linux_dmabuf() -> bool {
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-dmabuf.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    const u32 dmabuf_global = display.add_global("zwp_linux_dmabuf_v1", 3);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(dmabuf_global));
+    static_cast<void>(requests.write_string("zwp_linux_dmabuf_v1"));
+    static_cast<void>(requests.write_u32(3));
+    static_cast<void>(requests.write_new_id(3));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(3, 1));
+    static_cast<void>(requests.write_new_id(4));
+    static_cast<void>(requests.end_message());
+    auto sent = client.send(requests.bytes(), requests.fds());
+    if (!sent || !server.receive_available() || !server.dispatch_available() || !server.flush()) {
+        return false;
+    }
+
+    std::array<std::byte, 2048> received{};
+    auto result = client.receive(received, std::span<pwm::handle_t>{});
+    if (!result) {
+        return false;
+    }
+    const std::span<const std::byte> input{received.data(), result->bytes};
+    pwm::u32 formats = 0;
+    pwm::u32 modifiers = 0;
+    pwm::usize offset = 0;
+    while (offset + sizeof(wayland::message_header) <= input.size()) {
+        auto header = wayland::decode_header(input.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = input.subspan(offset + sizeof(wayland::message_header),
+                                           header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == 3 && header->opcode == 0) {
+            if (!generated::zwp_linux_dmabuf_v1::event_format::decode(reader)) {
+                return false;
+            }
+            ++formats;
+        } else if (header->object == 3 && header->opcode == 1) {
+            if (!generated::zwp_linux_dmabuf_v1::event_modifier::decode(reader)) {
+                return false;
+            }
+            ++modifiers;
+        } else if (header->object == 2 && header->opcode == 0) {
+            static_cast<void>(reader);
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    if (formats != 2 || modifiers != 1) {
+        return false;
+    }
+
+    auto file = pwm::platform::wayland::create_anonymous_file("powerwm-dmabuf", 32 * 32 * 4);
+    if (!file) {
+        return false;
+    }
+    wayland::protocol_writer create;
+    static_cast<void>(create.begin_message(4, 1));
+    static_cast<void>(create.write_fd(file->fd()));
+    static_cast<void>(create.write_u32(0));
+    static_cast<void>(create.write_u32(0));
+    static_cast<void>(create.write_u32(128));
+    static_cast<void>(create.write_u32(0));
+    static_cast<void>(create.write_u32(0));
+    static_cast<void>(create.end_message());
+    static_cast<void>(create.begin_message(4, 3));
+    static_cast<void>(create.write_new_id(5));
+    static_cast<void>(create.write_i32(32));
+    static_cast<void>(create.write_i32(32));
+    static_cast<void>(create.write_u32(0x34325241));
+    static_cast<void>(create.write_u32(0));
+    static_cast<void>(create.end_message());
+    auto created = client.send(create.bytes(), create.fds());
+    if (!created || !server.receive_available() || !server.dispatch_available() ||
+        !server.flush()) {
+        return false;
+    }
+    if (server.objects().find(4) == nullptr || server.objects().find(5) == nullptr) {
+        return false;
+    }
+
+    wayland::protocol_writer destroy;
+    static_cast<void>(destroy.begin_message(5, 0));
+    static_cast<void>(destroy.end_message());
+    static_cast<void>(destroy.begin_message(4, 0));
+    static_cast<void>(destroy.end_message());
+    auto destroyed = client.send(destroy.bytes(), destroy.fds());
+    if (!destroyed || !server.receive_available() || !server.dispatch_available()) {
+        return false;
+    }
+    return server.objects().find(4) == nullptr && server.objects().find(5) == nullptr;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -2087,6 +2209,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_linux_dmabuf()) {
+        std::println(stderr, "linux-dmabuf test failed");
         return EXIT_FAILURE;
     }
     if (!test_drag_transfer()) {

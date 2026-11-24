@@ -42,6 +42,7 @@ class surface_scene {
         scene::node node;
         std::unique_ptr<vulkanpp::texture> texture;
         scene::texture_id texture_id = 0;
+        object_id buffer = 0;
         base::recti bounds{};
     };
 

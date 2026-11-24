@@ -203,6 +203,22 @@ list(APPEND POWERWM_PROTOCOL_OUTPUTS
     "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_activation_bindings.hpp"
     "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_activation_bindings.cpp")
 
+add_custom_command(
+    OUTPUT
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/linux_dmabuf_bindings.hpp"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/linux_dmabuf_bindings.cpp"
+    COMMAND $<TARGET_FILE:powerwm_protocol_scanner>
+        "${CMAKE_SOURCE_DIR}/protocols/linux-dmabuf-v1.xml"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/linux_dmabuf_bindings.hpp"
+        "${POWERWM_GENERATED_PROTOCOL_DIR}/linux_dmabuf_bindings.cpp"
+    DEPENDS powerwm_protocol_scanner "${CMAKE_SOURCE_DIR}/protocols/linux-dmabuf-v1.xml"
+    COMMENT "Generating linux-dmabuf bindings"
+    VERBATIM
+)
+list(APPEND POWERWM_PROTOCOL_OUTPUTS
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/linux_dmabuf_bindings.hpp"
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/linux_dmabuf_bindings.cpp")
+
 add_custom_target(powerwm_protocols DEPENDS ${POWERWM_PROTOCOL_OUTPUTS})
 
 add_library(powerwm_wayland STATIC
@@ -224,6 +240,7 @@ add_library(powerwm_wayland STATIC
     "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_decoration_bindings.cpp"
     "${POWERWM_GENERATED_PROTOCOL_DIR}/presentation_time_bindings.cpp"
     "${POWERWM_GENERATED_PROTOCOL_DIR}/xdg_activation_bindings.cpp"
+    "${POWERWM_GENERATED_PROTOCOL_DIR}/linux_dmabuf_bindings.cpp"
 )
 target_include_directories(powerwm_wayland PUBLIC
     ${CMAKE_SOURCE_DIR}/src

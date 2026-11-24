@@ -179,6 +179,8 @@ libwayland.
 - [x] GTK4 Wayland client connects and commits a shm window;
 - [x] cross-client clipboard selection, offers, mime negotiation, and fd transfer;
 - [x] drag-and-drop offer, enter, motion, drop, action, and finish flow;
+- [x] `linux-dmabuf-v1` format/modifier advertisement, single-plane params, buffer
+  creation, and Vulkan DMA-BUF import (linear and modifier-tiled);
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [x] in-tree socket handshake and raw-wire client verification;

@@ -69,6 +69,44 @@ auto surface_scene::on_commit(u64 surface_key, const surface_commit_event& event
         return std::unexpected(
             make_error(error_code::invalid_argument, "surface buffer dimensions are invalid"));
     }
+    if (event.is_dmabuf) {
+        if (event.fd < 0) {
+            return std::unexpected(
+                make_error(error_code::invalid_argument, "surface DMA-BUF is invalid"));
+        }
+        const bool recreate = entry.texture == nullptr || entry.buffer != event.buffer ||
+                              entry.texture->width_px() != static_cast<u32>(event.width) ||
+                              entry.texture->height_px() != static_cast<u32>(event.height);
+        if (recreate) {
+            auto created = vulkanpp::create_dma_buf_texture(
+                *device_, {.fd = event.fd,
+                           .width_px = static_cast<u32>(event.width),
+                           .height_px = static_cast<u32>(event.height),
+                           .stride_bytes = static_cast<u32>(event.stride),
+                           .fourcc = event.format,
+                           .modifier = event.modifier});
+            if (!created) {
+                return std::unexpected(created.error());
+            }
+            entry.texture = std::make_unique<vulkanpp::texture>(std::move(*created));
+        }
+        entry.buffer = event.buffer;
+        const base::recti old_bounds = entry.node.bounds();
+        base::recti bounds = entry.bounds;
+        if (bounds.is_empty()) {
+            bounds = next_cascade();
+            bounds.width = event.width;
+            bounds.height = event.height;
+        }
+        entry.bounds = bounds;
+        auto transaction = graph_.begin();
+        transaction.move(entry.node, bounds);
+        transaction.show(entry.node, true);
+        graph_.add_damage(transaction.commit());
+        graph_.add_damage(old_bounds);
+        rebuild_bindings();
+        return {};
+    }
     if (event.format != shm_argb8888 && event.format != shm_xrgb8888) {
         return std::unexpected(
             make_error(error_code::unsupported, "surface buffer format is unsupported"));
@@ -110,6 +148,7 @@ auto surface_scene::on_commit(u64 surface_key, const surface_commit_event& event
         bounds.height = event.height;
     }
     entry.bounds = bounds;
+    entry.buffer = event.buffer;
     auto transaction = graph_.begin();
     transaction.move(entry.node, bounds);
     transaction.show(entry.node, true);

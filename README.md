@@ -62,6 +62,7 @@ Working today:
   xdg-activation, and page-flip presentation feedback
 - cross-client clipboard selection, mime offers, file-descriptor transfer, and
   drag-and-drop enter/motion/drop events
+- `linux-dmabuf-v1` with Vulkan DMA-BUF import for surface rendering
 - real GTK4 client connects and commits a shm window
 
 Still ahead:

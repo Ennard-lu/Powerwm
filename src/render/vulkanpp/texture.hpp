@@ -22,6 +22,15 @@ struct texture_data {
     texture_format format = texture_format::rgba8;
 };
 
+struct dma_buf_texture_data {
+    handle_t fd = -1;
+    u32 width_px = 0;
+    u32 height_px = 0;
+    u32 stride_bytes = 0;
+    u32 fourcc = 0;
+    u64 modifier = 0;
+};
+
 class texture {
   public:
     texture() noexcept = default;
@@ -51,6 +60,9 @@ class texture {
   private:
     friend auto create_texture(const device& device, u32 width_px, u32 height_px,
                                const texture_data& data) noexcept -> result<texture>;
+    friend auto create_dma_buf_texture(const device& device,
+                                       const dma_buf_texture_data& data) noexcept
+        -> result<texture>;
 
     texture(const device* device, void* image, void* memory, void* view, void* sampler,
             bool initialized, u32 width_px, u32 height_px, texture_format format) noexcept
@@ -74,5 +86,9 @@ class texture {
 
 [[nodiscard]] auto create_texture(const device& device, u32 width_px, u32 height_px,
                                   std::span<const std::byte> rgba8) noexcept -> result<texture>;
+
+[[nodiscard]] auto create_dma_buf_texture(const device& device,
+                                          const dma_buf_texture_data& data) noexcept
+    -> result<texture>;
 
 }

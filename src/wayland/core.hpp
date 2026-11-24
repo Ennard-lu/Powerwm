@@ -29,6 +29,9 @@ struct surface_commit_event {
     i32 stride = 0;
     u32 format = 0;
     std::span<const std::byte> pixels;
+    bool is_dmabuf = false;
+    handle_t fd = -1;
+    u64 modifier = 0;
 };
 
 using surface_commit_callback = auto (*)(void* context, const surface_commit_event& event) -> void;
@@ -212,6 +215,37 @@ struct data_device_manager_object {
     [[nodiscard]] auto request_release() -> result<void>;
 };
 
+struct linux_buffer_params_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    platform::wayland::file_descriptor fd;
+    u32 offset = 0;
+    u32 stride = 0;
+    u64 modifier = 0;
+    u32 plane_count = 0;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_add(handle_t fd, u32 plane, u32 offset, u32 stride, u32 modifier_hi,
+                                   u32 modifier_lo) -> result<void>;
+    [[nodiscard]] auto request_create(i32 width, i32 height, u32 format, u32 flags) -> result<void>;
+    [[nodiscard]] auto request_create_immed(object_id buffer, i32 width, i32 height, u32 format,
+                                            u32 flags) -> result<void>;
+    [[nodiscard]] auto request_set_sampling_device(std::span<const std::byte> device)
+        -> result<void>;
+};
+
+struct linux_dmabuf_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    u32 version = 1;
+
+    [[nodiscard]] auto request_destroy() -> result<void>;
+    [[nodiscard]] auto request_create_params(object_id params) -> result<void>;
+    [[nodiscard]] auto request_get_default_feedback(object_id feedback) -> result<void>;
+    [[nodiscard]] auto request_get_surface_feedback(object_id feedback, object_id surface)
+        -> result<void>;
+};
+
 struct output_object {
     core_protocol* core = nullptr;
     object_id id = 0;
@@ -282,6 +316,10 @@ struct buffer_object {
     i32 height = 0;
     i32 stride = 0;
     u32 format = 0;
+    bool is_dmabuf = false;
+    bool server_created = false;
+    platform::wayland::file_descriptor dmabuf_fd;
+    u64 modifier = 0;
 
     [[nodiscard]] auto request_destroy() -> result<void>;
 };
@@ -346,6 +384,14 @@ class core_protocol {
     [[nodiscard]] auto create_pool(object_id id, handle_t fd, i32 size) -> result<void>;
     [[nodiscard]] auto create_buffer(object_id id, object_id pool, i32 offset, i32 width,
                                      i32 height, i32 stride, u32 format) -> result<void>;
+    [[nodiscard]] auto create_dmabuf_buffer(object_id id, platform::wayland::file_descriptor fd,
+                                            i32 width, i32 height, u32 stride, u32 format,
+                                            u64 modifier, bool server_created) -> result<void>;
+    [[nodiscard]] auto allocate_server_object_id() noexcept -> object_id;
+    [[nodiscard]] auto create_linux_buffer_params(object_id id) -> result<void>;
+    [[nodiscard]] auto send_linux_buffer_created(object_id params, object_id buffer)
+        -> result<void>;
+    [[nodiscard]] auto send_linux_buffer_failed(object_id params) -> result<void>;
 
     auto configure_output(u32 width, u32 height, u32 refresh_hz) noexcept -> void;
 
@@ -409,6 +455,8 @@ class core_protocol {
     friend struct data_offer_object;
     friend struct data_source_object;
     friend struct data_device_object;
+    friend struct linux_buffer_params_object;
+    friend struct linux_dmabuf_object;
 
     [[nodiscard]] auto send_shm_formats(object_id id) -> result<void>;
     [[nodiscard]] auto send_output_events(object_id id, u32 version) -> result<void>;
@@ -452,6 +500,8 @@ class core_protocol {
     std::vector<std::unique_ptr<data_device_object>> data_devices_;
     std::vector<std::unique_ptr<data_source_object>> data_sources_;
     std::vector<std::unique_ptr<data_offer_object>> data_offers_;
+    std::vector<std::unique_ptr<linux_dmabuf_object>> linux_dmabufs_;
+    std::vector<std::unique_ptr<linux_buffer_params_object>> linux_buffer_params_;
     std::vector<object_id> pointer_ids_;
     std::vector<object_id> keyboard_ids_;
     std::vector<object_id> touch_ids_;
