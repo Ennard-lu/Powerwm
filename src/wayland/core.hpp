@@ -216,6 +216,44 @@ struct data_device_manager_object {
     [[nodiscard]] auto request_release() -> result<void>;
 };
 
+struct primary_source_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    std::vector<std::string> mime_types;
+
+    [[nodiscard]] auto request_offer(std::string_view mime) -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+};
+
+struct primary_offer_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    u32 source_client = 0;
+    object_id source_object = 0;
+    std::vector<std::string> mime_types;
+
+    [[nodiscard]] auto request_receive(std::string_view mime, handle_t fd) -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+};
+
+struct primary_device_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+    object_id selection = 0;
+
+    [[nodiscard]] auto request_set_selection(object_id source, u32 serial) -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+};
+
+struct primary_manager_object {
+    core_protocol* core = nullptr;
+    object_id id = 0;
+
+    [[nodiscard]] auto request_create_source(object_id source) -> result<void>;
+    [[nodiscard]] auto request_get_device(object_id device, object_id seat) -> result<void>;
+    [[nodiscard]] auto request_destroy() -> result<void>;
+};
+
 struct linux_buffer_params_object {
     core_protocol* core = nullptr;
     object_id id = 0;
@@ -448,6 +486,15 @@ class core_protocol {
     [[nodiscard]] auto send_linux_buffer_created(object_id params, object_id buffer)
         -> result<void>;
     [[nodiscard]] auto send_linux_buffer_failed(object_id params) -> result<void>;
+    [[nodiscard]] auto create_primary_offer(u32 source_client, object_id source_object,
+                                            std::span<const std::string> mime_types)
+        -> result<object_id>;
+    [[nodiscard]] auto primary_source_mime_types(object_id source) const
+        -> std::span<const std::string>;
+    [[nodiscard]] auto send_primary_selection(object_id offer) -> result<void>;
+    [[nodiscard]] auto send_primary_source_send(object_id source, std::string_view mime,
+                                                handle_t fd) -> result<void>;
+    [[nodiscard]] auto send_primary_source_cancelled(object_id source) -> result<void>;
     auto set_defer_frame_callbacks(bool value) noexcept -> void;
     [[nodiscard]] auto queue_frame_callback(object_id callback) -> result<bool>;
     [[nodiscard]] auto flush_frame_callbacks() -> result<void>;
@@ -519,6 +566,10 @@ class core_protocol {
     friend struct linux_dmabuf_object;
     friend struct layer_surface_object;
     friend struct layer_shell_object;
+    friend struct primary_source_object;
+    friend struct primary_offer_object;
+    friend struct primary_device_object;
+    friend struct primary_manager_object;
 
     [[nodiscard]] auto send_shm_formats(object_id id) -> result<void>;
     [[nodiscard]] auto send_output_events(object_id id, u32 version) -> result<void>;
@@ -566,6 +617,10 @@ class core_protocol {
     std::vector<std::unique_ptr<linux_buffer_params_object>> linux_buffer_params_;
     std::vector<std::unique_ptr<layer_shell_object>> layer_shells_;
     std::vector<std::unique_ptr<layer_surface_object>> layer_surfaces_;
+    std::vector<std::unique_ptr<primary_manager_object>> primary_managers_;
+    std::vector<std::unique_ptr<primary_device_object>> primary_devices_;
+    std::vector<std::unique_ptr<primary_source_object>> primary_sources_;
+    std::vector<std::unique_ptr<primary_offer_object>> primary_offers_;
     std::vector<object_id> pointer_ids_;
     std::vector<object_id> keyboard_ids_;
     std::vector<object_id> touch_ids_;

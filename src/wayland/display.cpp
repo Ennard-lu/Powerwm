@@ -45,6 +45,7 @@ auto display_service::advertise_core(u32 output_width, u32 output_height, u32 re
     add_global("wl_data_device_manager", 3);
     add_global("zwp_linux_dmabuf_v1", 3);
     add_global("zwlr_layer_shell_v1", 4);
+    add_global("zwp_primary_selection_device_manager_v1", 1);
     add_global("xdg_wm_base", 1);
 }
 
@@ -424,6 +425,79 @@ auto display_service::notify_data_source_destroyed(object_id source) -> void {
     if (data_source_destroyed_callback_ != nullptr) {
         data_source_destroyed_callback_(data_source_destroyed_context_, source);
     }
+}
+
+auto display_service::set_primary_source_callback(primary_source_callback callback,
+                                                  void* context) noexcept -> void {
+    primary_source_callback_ = callback;
+    primary_source_context_ = context;
+}
+
+auto display_service::set_primary_source_destroyed_callback(
+    primary_source_destroyed_callback callback, void* context) noexcept -> void {
+    primary_source_destroyed_callback_ = callback;
+    primary_source_destroyed_context_ = context;
+}
+
+auto display_service::set_primary_offer_receive_callback(primary_offer_receive_callback callback,
+                                                         void* context) noexcept -> void {
+    primary_offer_receive_callback_ = callback;
+    primary_offer_receive_context_ = context;
+}
+
+auto display_service::notify_primary_selection(object_id source, u32 serial) -> result<void> {
+    if (primary_source_callback_ == nullptr) {
+        return {};
+    }
+    primary_source_callback_(primary_source_context_,
+                             {.source = source,
+                              .serial = serial,
+                              .mime_types = core_.primary_source_mime_types(source)});
+    return {};
+}
+
+auto display_service::notify_primary_source_destroyed(object_id source) -> void {
+    if (primary_source_destroyed_callback_ != nullptr) {
+        primary_source_destroyed_callback_(primary_source_destroyed_context_, source);
+    }
+}
+
+auto display_service::primary_source_mime_types(object_id source) const
+    -> std::span<const std::string> {
+    return core_.primary_source_mime_types(source);
+}
+
+auto display_service::create_primary_offer(u32 source_client, object_id source_object,
+                                           std::span<const std::string> mime_types)
+    -> result<object_id> {
+    return core_.create_primary_offer(source_client, source_object, mime_types);
+}
+
+auto display_service::send_primary_selection(object_id offer) -> result<void> {
+    return core_.send_primary_selection(offer);
+}
+
+auto display_service::receive_primary_offer(object_id offer, u32 source_client,
+                                            object_id source_object, std::string_view mime_type,
+                                            handle_t fd) -> result<void> {
+    if (primary_offer_receive_callback_ == nullptr) {
+        return {};
+    }
+    primary_offer_receive_callback_(primary_offer_receive_context_, {.offer = offer,
+                                                                     .source_client = source_client,
+                                                                     .source_object = source_object,
+                                                                     .mime_type = mime_type,
+                                                                     .fd = fd});
+    return {};
+}
+
+auto display_service::send_primary_source_send(object_id source, std::string_view mime, handle_t fd)
+    -> result<void> {
+    return core_.send_primary_source_send(source, mime, fd);
+}
+
+auto display_service::send_primary_source_cancelled(object_id source) -> result<void> {
+    return core_.send_primary_source_cancelled(source);
 }
 
 auto display_service::data_source_mime_types(object_id source) const

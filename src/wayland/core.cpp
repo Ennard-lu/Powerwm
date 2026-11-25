@@ -10,6 +10,7 @@
 #include <layer_shell_bindings.hpp>
 #include <linux_dmabuf_bindings.hpp>
 #include <presentation_time_bindings.hpp>
+#include <primary_selection_bindings.hpp>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -33,6 +34,58 @@ auto valid_buffer_size(const shm_pool_object& pool, i32 offset, i32 width, i32 h
     return end <= pool.size;
 }
 
+}
+
+auto primary_source_object::request_offer(std::string_view mime) -> result<void> {
+    mime_types.emplace_back(mime);
+    return {};
+}
+
+auto primary_source_object::request_destroy() -> result<void> {
+    core->service().notify_primary_source_destroyed(id);
+    core->service().connection_ref().objects().remove(id);
+    return {};
+}
+
+auto primary_offer_object::request_receive(std::string_view mime, handle_t fd) -> result<void> {
+    if (std::find(mime_types.begin(), mime_types.end(), mime) == mime_types.end()) {
+        return std::unexpected(
+            make_error(error_code::protocol, "primary offer does not provide the mime type"));
+    }
+    auto owned = platform::wayland::file_descriptor::adopt(fd);
+    return core->service().receive_primary_offer(id, source_client, source_object, mime,
+                                                 owned.fd());
+}
+
+auto primary_offer_object::request_destroy() -> result<void> {
+    core->service().connection_ref().objects().remove(id);
+    return {};
+}
+
+auto primary_device_object::request_set_selection(object_id source, u32 serial) -> result<void> {
+    selection = source;
+    return core->service().notify_primary_selection(source, serial);
+}
+
+auto primary_device_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
+}
+
+auto primary_manager_object::request_create_source(object_id source) -> result<void> {
+    auto* object = core->store(core->primary_sources_, primary_source_object{core, source});
+    return add_object<primary_source_object, generated::zwp_primary_selection_source_v1>(
+        core->service().connection_ref().objects(), source, *object);
+}
+
+auto primary_manager_object::request_get_device(object_id device, object_id seat) -> result<void> {
+    static_cast<void>(seat);
+    auto* object = core->store(core->primary_devices_, primary_device_object{core, device});
+    return add_object<primary_device_object, generated::zwp_primary_selection_device_v1>(
+        core->service().connection_ref().objects(), device, *object);
+}
+
+auto primary_manager_object::request_destroy() -> result<void> {
+    return core->service().destroy_object(id);
 }
 
 auto linux_buffer_params_object::request_destroy() -> result<void> {
@@ -858,6 +911,12 @@ auto core_protocol::bind_global(std::string_view interface, object_id id, u32 ve
         return add_object<subcompositor_object, generated::wl_subcompositor>(
             service_->connection_ref().objects(), id, *object);
     }
+    if (interface == generated::zwp_primary_selection_device_manager_v1::name) {
+        auto* object = store(primary_managers_, primary_manager_object{this, id});
+        return add_object<primary_manager_object,
+                          generated::zwp_primary_selection_device_manager_v1>(
+            service_->connection_ref().objects(), id, *object);
+    }
     if (interface == generated::zwlr_layer_shell_v1::name) {
         return create_layer_shell(id, version);
     }
@@ -1123,6 +1182,100 @@ auto core_protocol::configure_layer_surface(object_id surface) -> result<void> {
         return {};
     }
     return {};
+}
+
+auto core_protocol::create_primary_offer(u32 source_client, object_id source_object,
+                                         std::span<const std::string> mime_types)
+    -> result<object_id> {
+    const object_id offer = next_server_id_++;
+    auto* object =
+        store(primary_offers_, primary_offer_object{this, offer, source_client, source_object});
+    object->mime_types.assign(mime_types.begin(), mime_types.end());
+    if (auto added = add_object<primary_offer_object, generated::zwp_primary_selection_offer_v1>(
+            service_->connection_ref().objects(), offer, *object);
+        !added) {
+        return std::unexpected(added.error());
+    }
+    for (const std::string& mime : object->mime_types) {
+        generated::zwp_primary_selection_offer_v1::event_offer event{};
+        std::get<0>(event.arguments) = mime;
+        protocol_writer writer;
+        if (auto encoded = generated::zwp_primary_selection_offer_v1::event_offer::encode(
+                writer, offer, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return offer;
+}
+
+auto core_protocol::primary_source_mime_types(object_id source) const
+    -> std::span<const std::string> {
+    for (const auto& object : primary_sources_) {
+        if (object->id == source) {
+            return object->mime_types;
+        }
+    }
+    return {};
+}
+
+auto core_protocol::send_primary_selection(object_id offer) -> result<void> {
+    for (const auto& device : primary_devices_) {
+        generated::zwp_primary_selection_device_v1::event_selection event{};
+        std::get<0>(event.arguments) = offer;
+        protocol_writer writer;
+        if (auto encoded = generated::zwp_primary_selection_device_v1::event_selection::encode(
+                writer, device->id, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
+}
+
+auto core_protocol::send_primary_source_send(object_id source, std::string_view mime, handle_t fd)
+    -> result<void> {
+    bool found = false;
+    for (const auto& object : primary_sources_) {
+        if (object->id != source) {
+            continue;
+        }
+        found = true;
+        generated::zwp_primary_selection_source_v1::event_send event{};
+        std::get<0>(event.arguments) = mime;
+        std::get<1>(event.arguments) = fd;
+        protocol_writer writer;
+        if (auto encoded = generated::zwp_primary_selection_source_v1::event_send::encode(
+                writer, source, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+        break;
+    }
+    if (!found) {
+        return std::unexpected(make_error(error_code::protocol, "primary source no longer exists"));
+    }
+    return service_->connection_ref().flush();
+}
+
+auto core_protocol::send_primary_source_cancelled(object_id source) -> result<void> {
+    generated::zwp_primary_selection_source_v1::event_cancelled event{};
+    protocol_writer writer;
+    if (auto encoded = generated::zwp_primary_selection_source_v1::event_cancelled::encode(
+            writer, source, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return service_->queue_event(writer);
 }
 
 auto core_protocol::create_linux_buffer_params(object_id id) -> result<void> {

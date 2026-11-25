@@ -20,6 +20,7 @@
 #include <layer_shell_bindings.hpp>
 #include <linux_dmabuf_bindings.hpp>
 #include <presentation_time_bindings.hpp>
+#include <primary_selection_bindings.hpp>
 #include <print>
 #include <span>
 #include <string_view>
@@ -2452,6 +2453,251 @@ auto test_frame_callback_deferral() -> bool {
     return saw_done;
 }
 
+struct primary_harness {
+    wayland::display_service* source_display = nullptr;
+    wayland::display_service* destination_display = nullptr;
+    u32 offer = 0;
+    bool selected = false;
+    bool forwarded = false;
+};
+
+auto on_primary_selection(void* context, const wayland::primary_source_event& event) -> void {
+    auto& harness = *static_cast<primary_harness*>(context);
+    harness.selected = true;
+    auto offer =
+        harness.destination_display->create_primary_offer(1, event.source, event.mime_types);
+    if (!offer) {
+        return;
+    }
+    harness.offer = *offer;
+    static_cast<void>(harness.destination_display->send_primary_selection(*offer));
+}
+
+auto on_primary_receive(void* context, const wayland::primary_offer_receive_event& event) -> void {
+    auto& harness = *static_cast<primary_harness*>(context);
+    harness.forwarded = static_cast<bool>(harness.source_display->send_primary_source_send(
+        event.source_object, event.mime_type, event.fd));
+}
+
+auto test_primary_selection() -> bool {
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-primary.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto source_client_result = transport::connect_stream(path);
+    auto destination_client_result = transport::connect_stream(path);
+    if (!source_client_result || !destination_client_result) {
+        return false;
+    }
+    auto source_client = std::move(*source_client_result);
+    auto destination_client = std::move(*destination_client_result);
+    auto source_server_result = listener.accept();
+    auto destination_server_result = listener.accept();
+    if (!source_server_result || !destination_server_result) {
+        return false;
+    }
+    wayland::connection source_server{std::move(*source_server_result)};
+    wayland::connection destination_server{std::move(*destination_server_result)};
+    wayland::display_service source_display{source_server};
+    wayland::display_service destination_display{destination_server};
+    if (!source_display.start() || !destination_display.start()) {
+        return false;
+    }
+    const u32 source_global =
+        source_display.add_global("zwp_primary_selection_device_manager_v1", 1);
+    const u32 destination_global =
+        destination_display.add_global("zwp_primary_selection_device_manager_v1", 1);
+
+    primary_harness harness{
+        .source_display = &source_display,
+        .destination_display = &destination_display,
+    };
+    source_display.set_primary_source_callback(on_primary_selection, &harness);
+    destination_display.set_primary_offer_receive_callback(on_primary_receive, &harness);
+
+    const auto bind_global = [](wayland::protocol_writer& writer, u32 global,
+                                std::string_view interface, u32 version, u32 id) {
+        static_cast<void>(writer.begin_message(2, 0));
+        static_cast<void>(writer.write_u32(global));
+        static_cast<void>(writer.write_string(interface));
+        static_cast<void>(writer.write_u32(version));
+        static_cast<void>(writer.write_new_id(id));
+        static_cast<void>(writer.end_message());
+    };
+
+    wayland::protocol_writer destination_setup;
+    static_cast<void>(destination_setup.begin_message(1, 1));
+    static_cast<void>(destination_setup.write_new_id(2));
+    static_cast<void>(destination_setup.end_message());
+    bind_global(destination_setup, destination_global, "zwp_primary_selection_device_manager_v1", 1,
+                3);
+    static_cast<void>(destination_setup.begin_message(3, 1));
+    static_cast<void>(destination_setup.write_new_id(5));
+    static_cast<void>(destination_setup.write_object(0));
+    static_cast<void>(destination_setup.end_message());
+    auto destination_sent =
+        destination_client.send(destination_setup.bytes(), destination_setup.fds());
+    if (!destination_sent || !destination_server.receive_available() ||
+        !destination_server.dispatch_available() || !destination_server.flush()) {
+        return false;
+    }
+    std::vector<std::byte> ignored_input;
+    std::vector<pwm::handle_t> ignored_fds;
+    if (!drain_client(destination_client, ignored_input, ignored_fds)) {
+        return false;
+    }
+
+    wayland::protocol_writer source_setup;
+    static_cast<void>(source_setup.begin_message(1, 1));
+    static_cast<void>(source_setup.write_new_id(2));
+    static_cast<void>(source_setup.end_message());
+    bind_global(source_setup, source_global, "zwp_primary_selection_device_manager_v1", 1, 3);
+    static_cast<void>(source_setup.begin_message(3, 0));
+    static_cast<void>(source_setup.write_new_id(4));
+    static_cast<void>(source_setup.end_message());
+    static_cast<void>(source_setup.begin_message(4, 0));
+    static_cast<void>(source_setup.write_string("text/plain"));
+    static_cast<void>(source_setup.end_message());
+    static_cast<void>(source_setup.begin_message(3, 1));
+    static_cast<void>(source_setup.write_new_id(6));
+    static_cast<void>(source_setup.write_object(0));
+    static_cast<void>(source_setup.end_message());
+    static_cast<void>(source_setup.begin_message(6, 0));
+    static_cast<void>(source_setup.write_object(4));
+    static_cast<void>(source_setup.write_u32(1));
+    static_cast<void>(source_setup.end_message());
+    auto source_sent = source_client.send(source_setup.bytes(), source_setup.fds());
+    if (!source_sent || !source_server.receive_available() || !source_server.dispatch_available() ||
+        !source_server.flush()) {
+        return false;
+    }
+    std::vector<std::byte> setup_input;
+    std::vector<pwm::handle_t> setup_fds;
+    if (!drain_client(source_client, setup_input, setup_fds)) {
+        return false;
+    }
+    if (!harness.selected || harness.offer == 0 || !destination_server.flush()) {
+        return false;
+    }
+
+    std::vector<std::byte> destination_input;
+    std::vector<pwm::handle_t> destination_fds;
+    if (!drain_client(destination_client, destination_input, destination_fds)) {
+        return false;
+    }
+    pwm::u32 offers = 0;
+    u32 selected = 0;
+    pwm::usize offset = 0;
+    while (offset + sizeof(wayland::message_header) <= destination_input.size()) {
+        auto header =
+            wayland::decode_header(std::span<const std::byte>{destination_input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{destination_input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == harness.offer && header->opcode == 0) {
+            if (!generated::zwp_primary_selection_offer_v1::event_offer::decode(reader)) {
+                return false;
+            }
+            ++offers;
+        } else if (header->object == 5 && header->opcode == 1) {
+            auto event =
+                generated::zwp_primary_selection_device_v1::event_selection::decode(reader);
+            if (!event) {
+                return false;
+            }
+            selected = std::get<0>(event->arguments);
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    if (offers != 1 || selected != harness.offer) {
+        return false;
+    }
+
+    auto pipe_result = transport::create_pipe();
+    if (!pipe_result) {
+        return false;
+    }
+    auto pipe = std::move(*pipe_result);
+    wayland::protocol_writer transfer;
+    static_cast<void>(transfer.begin_message(harness.offer, 0));
+    static_cast<void>(transfer.write_string("text/plain"));
+    static_cast<void>(transfer.write_fd(pipe.write.fd()));
+    static_cast<void>(transfer.end_message());
+    auto transfer_sent = destination_client.send(transfer.bytes(), transfer.fds());
+    pipe.write.destroy();
+    if (!transfer_sent || !destination_server.receive_available() ||
+        !destination_server.dispatch_available() || !destination_server.flush()) {
+        return false;
+    }
+    if (!harness.forwarded) {
+        return false;
+    }
+
+    std::vector<std::byte> source_input;
+    std::vector<pwm::handle_t> source_fds;
+    if (!drain_client(source_client, source_input, source_fds) || source_fds.size() != 1) {
+        return false;
+    }
+    pwm::handle_t transfer_fd = -1;
+    offset = 0;
+    while (offset + sizeof(wayland::message_header) <= source_input.size()) {
+        auto header =
+            wayland::decode_header(std::span<const std::byte>{source_input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{source_input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, source_fds};
+        if (header->object == 4 && header->opcode == 0) {
+            auto event = generated::zwp_primary_selection_source_v1::event_send::decode(reader);
+            if (!event) {
+                return false;
+            }
+            transfer_fd = std::get<1>(event->arguments);
+        } else {
+            return false;
+        }
+        offset += header->size;
+    }
+    if (transfer_fd < 0) {
+        return false;
+    }
+
+    constexpr std::string_view payload_text = "powerwm-primary";
+    auto transfer_owner = transport::file_descriptor::adopt(transfer_fd);
+    const auto written = transfer_owner.write(std::span<const std::byte>{
+        reinterpret_cast<const std::byte*>(payload_text.data()), payload_text.size()});
+    transfer_owner.destroy();
+    if (!written || *written != payload_text.size()) {
+        return false;
+    }
+
+    std::string received_text;
+    std::array<std::byte, 64> pipe_buffer{};
+    while (true) {
+        auto count = pipe.read.read(pipe_buffer);
+        if (!count) {
+            return false;
+        }
+        if (*count == 0) {
+            break;
+        }
+        received_text.append(reinterpret_cast<const char*>(pipe_buffer.data()), *count);
+    }
+    return received_text == payload_text;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -2502,6 +2748,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_primary_selection()) {
+        std::println(stderr, "primary selection test failed");
         return EXIT_FAILURE;
     }
     if (!test_frame_callback_deferral()) {

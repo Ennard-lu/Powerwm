@@ -153,8 +153,8 @@ ARGB8888/XRGB8888 with the linear modifier and imports client buffers into Vulka
 textures. `wlr-layer-shell-unstable-v1` places anchored layer surfaces with margins,
 exclusive zones, and keyboard interactivity. The KMS compositor drives each client
 through a coroutine session, frame callbacks are deferred to the next page flip, and
-buffers receive release events after a surface switches. Deterministic fuzz cases cover
-message decoding and XML parsing.
+buffers receive release events after a surface switches. Primary selection is brokered
+between clients. Deterministic fuzz cases cover message decoding and XML parsing.
 
-Multi-output layout and hotplug, primary selection, client-id lifetime validation, and a
-broader real-client matrix are the next Phase 3 steps.
+Multi-output layout and hotplug, client-id lifetime validation, and a broader real-client
+matrix are the next Phase 3 steps.

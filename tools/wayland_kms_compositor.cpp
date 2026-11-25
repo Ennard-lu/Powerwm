@@ -73,6 +73,12 @@ struct clipboard_source {
     std::vector<std::string> mime_types;
 };
 
+struct primary_source {
+    pwm::u32 client = 0;
+    wayland::object_id source = 0;
+    std::vector<std::string> mime_types;
+};
+
 struct drag_source {
     pwm::u32 client = 0;
     wayland::object_id source = 0;
@@ -101,6 +107,7 @@ struct compositor_state {
     std::vector<std::unique_ptr<client_session>> clients;
     std::vector<pending_feedback> pending_presentations;
     std::optional<clipboard_source> clipboard;
+    std::optional<primary_source> primary;
     std::optional<drag_source> drag;
     pwm::u32 next_client = 1;
     bool session_enabled = false;
@@ -190,6 +197,42 @@ auto broadcast_selection(compositor_state& state) -> void {
     }
 }
 
+auto broadcast_primary(compositor_state& state) -> void {
+    for (const auto& session : state.clients) {
+        if (session->closed) {
+            continue;
+        }
+        if (!state.primary) {
+            static_cast<void>(session->display.send_primary_selection(0));
+            static_cast<void>(session->connection.flush());
+            continue;
+        }
+        if (session->index == state.primary->client) {
+            continue;
+        }
+        auto offer = session->display.create_primary_offer(
+            state.primary->client, state.primary->source, state.primary->mime_types);
+        if (!offer) {
+            continue;
+        }
+        static_cast<void>(session->display.send_primary_selection(*offer));
+        static_cast<void>(session->connection.flush());
+    }
+}
+
+auto cancel_primary(compositor_state& state) -> void {
+    if (!state.primary) {
+        return;
+    }
+    const primary_source source = std::move(*state.primary);
+    state.primary.reset();
+    auto* client = find_client(state, source.client);
+    if (client != nullptr && !client->closed) {
+        static_cast<void>(client->display.send_primary_source_cancelled(source.source));
+        static_cast<void>(client->connection.flush());
+    }
+}
+
 auto cancel_clipboard(compositor_state& state) -> void {
     if (!state.clipboard) {
         return;
@@ -224,6 +267,49 @@ auto on_data_source(void* context, const wayland::data_source_event& event) -> v
         .mime_types = std::vector<std::string>{event.mime_types.begin(), event.mime_types.end()},
     };
     broadcast_selection(state);
+}
+
+auto on_primary_source(void* context, const wayland::primary_source_event& event) -> void {
+    auto& session = *static_cast<client_session*>(context);
+    auto& state = *session.compositor;
+    if (event.source == 0) {
+        if (state.primary && state.primary->client == session.index) {
+            state.primary.reset();
+            broadcast_primary(state);
+        }
+        return;
+    }
+    if (state.primary &&
+        (state.primary->client != session.index || state.primary->source != event.source)) {
+        cancel_primary(state);
+    }
+    state.primary = primary_source{
+        .client = session.index,
+        .source = event.source,
+        .mime_types = std::vector<std::string>{event.mime_types.begin(), event.mime_types.end()},
+    };
+    broadcast_primary(state);
+}
+
+auto on_primary_source_destroyed(void* context, wayland::object_id source) -> void {
+    auto& session = *static_cast<client_session*>(context);
+    auto& state = *session.compositor;
+    if (state.primary && state.primary->client == session.index &&
+        state.primary->source == source) {
+        state.primary.reset();
+        broadcast_primary(state);
+    }
+}
+
+auto on_primary_offer_receive(void* context, const wayland::primary_offer_receive_event& event)
+    -> void {
+    auto& session = *static_cast<client_session*>(context);
+    auto* source = find_client(*session.compositor, event.source_client);
+    if (source == nullptr || source->closed) {
+        return;
+    }
+    static_cast<void>(
+        source->display.send_primary_source_send(event.source_object, event.mime_type, event.fd));
 }
 
 auto on_data_source_destroyed(void* context, wayland::object_id source) -> void {
@@ -471,6 +557,10 @@ auto accept_client(compositor_state& state) -> void {
     session->display.set_data_source_destroyed_callback(on_data_source_destroyed, session.get());
     session->display.set_data_offer_receive_callback(on_data_offer_receive, session.get());
     session->display.set_data_offer_accept_callback(on_data_offer_accept, session.get());
+    session->display.set_primary_source_callback(on_primary_source, session.get());
+    session->display.set_primary_source_destroyed_callback(on_primary_source_destroyed,
+                                                           session.get());
+    session->display.set_primary_offer_receive_callback(on_primary_offer_receive, session.get());
     session->display.set_data_drag_callback(on_data_drag, session.get());
     session->display.set_data_offer_actions_callback(on_data_offer_actions, session.get());
     session->display.set_data_offer_finished_callback(on_data_offer_finished, session.get());

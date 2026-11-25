@@ -187,6 +187,8 @@ libwayland.
 - [x] coroutine `task<T>` and a per-client session coroutine in the KMS compositor;
 - [x] frame callbacks deferred to the next KMS page flip and `wl_buffer.release`
   after the surface switches buffers;
+- [x] `zwp_primary_selection_device_manager_v1` middle-click selection with fd
+  forwarding;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [x] in-tree socket handshake and raw-wire client verification;
 - [x] in-tree socket handshake, shm surface commit, and KMS presentation;

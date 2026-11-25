@@ -92,6 +92,8 @@ pre-1.0 `0.x.y` convention.
 - Deterministic wire-message and protocol-XML fuzz coverage.
 - Frame callbacks deferred to the next KMS page flip and `wl_buffer.release` events when
   a surface switches buffers.
+- `zwp_primary_selection_device_manager_v1` with compositor-brokered offers and file
+  descriptor forwarding.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

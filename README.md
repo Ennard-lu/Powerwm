@@ -64,8 +64,8 @@ Working today:
   drag-and-drop enter/motion/drop events
 - `linux-dmabuf-v1` with Vulkan DMA-BUF import for surface rendering
 - `wlr-layer-shell-unstable-v1` panels, bars, and overlays
-- coroutine `task<T>` client sessions, page-flip frame callbacks, buffer release, and
-  deterministic wire/XML fuzzing
+- coroutine `task<T>` client sessions, page-flip frame callbacks, buffer release,
+  primary selection, and deterministic wire/XML fuzzing
 - real GTK4 client connects and commits a shm window
 
 Still ahead:

@@ -94,6 +94,26 @@ struct data_offer_finished_event {
 using data_offer_finished_callback = auto (*)(void* context, const data_offer_finished_event& event)
     -> void;
 
+struct primary_source_event {
+    object_id source = 0;
+    u32 serial = 0;
+    std::span<const std::string> mime_types;
+};
+
+using primary_source_callback = auto (*)(void* context, const primary_source_event& event) -> void;
+using primary_source_destroyed_callback = auto (*)(void* context, object_id source) -> void;
+
+struct primary_offer_receive_event {
+    object_id offer = 0;
+    u32 source_client = 0;
+    object_id source_object = 0;
+    std::string_view mime_type;
+    handle_t fd = -1;
+};
+
+using primary_offer_receive_callback = auto (*)(void* context,
+                                                const primary_offer_receive_event& event) -> void;
+
 struct display_object {
     display_service* service = nullptr;
 
@@ -232,6 +252,37 @@ class display_service {
 
     [[nodiscard]] auto send_data_source_cancelled(object_id source) -> result<void>;
 
+    auto set_primary_source_callback(primary_source_callback callback, void* context) noexcept
+        -> void;
+
+    auto set_primary_source_destroyed_callback(primary_source_destroyed_callback callback,
+                                               void* context) noexcept -> void;
+
+    auto set_primary_offer_receive_callback(primary_offer_receive_callback callback,
+                                            void* context) noexcept -> void;
+
+    [[nodiscard]] auto notify_primary_selection(object_id source, u32 serial) -> result<void>;
+
+    [[nodiscard]] auto notify_primary_source_destroyed(object_id source) -> void;
+
+    [[nodiscard]] auto primary_source_mime_types(object_id source) const
+        -> std::span<const std::string>;
+
+    [[nodiscard]] auto create_primary_offer(u32 source_client, object_id source_object,
+                                            std::span<const std::string> mime_types)
+        -> result<object_id>;
+
+    [[nodiscard]] auto send_primary_selection(object_id offer) -> result<void>;
+
+    [[nodiscard]] auto receive_primary_offer(object_id offer, u32 source_client,
+                                             object_id source_object, std::string_view mime_type,
+                                             handle_t fd) -> result<void>;
+
+    [[nodiscard]] auto send_primary_source_send(object_id source, std::string_view mime,
+                                                handle_t fd) -> result<void>;
+
+    [[nodiscard]] auto send_primary_source_cancelled(object_id source) -> result<void>;
+
     auto set_data_drag_callback(data_drag_callback callback, void* context) noexcept -> void;
 
     auto set_data_offer_actions_callback(data_offer_actions_callback callback,
@@ -293,6 +344,12 @@ class display_service {
     void* data_offer_actions_context_ = nullptr;
     data_offer_finished_callback data_offer_finished_callback_ = nullptr;
     void* data_offer_finished_context_ = nullptr;
+    primary_source_callback primary_source_callback_ = nullptr;
+    void* primary_source_context_ = nullptr;
+    primary_source_destroyed_callback primary_source_destroyed_callback_ = nullptr;
+    void* primary_source_destroyed_context_ = nullptr;
+    primary_offer_receive_callback primary_offer_receive_callback_ = nullptr;
+    void* primary_offer_receive_context_ = nullptr;
     std::vector<std::unique_ptr<registry_object>> registries_;
     std::vector<registry_global> globals_;
     u32 next_global_name_ = 1;
