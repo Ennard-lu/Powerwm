@@ -745,15 +745,16 @@ auto surface_object::request_destroy() -> result<void> {
 }
 
 auto surface_object::request_attach(object_id new_buffer, i32 x, i32 y) -> result<void> {
-    buffer = new_buffer;
-    offset_x = x;
-    offset_y = y;
+    pending_buffer = new_buffer;
+    pending_offset_x = x;
+    pending_offset_y = y;
+    buffer_pending = true;
     return {};
 }
 
 auto surface_object::request_damage(i32 x, i32 y, i32 width, i32 height) -> result<void> {
     if (width > 0 && height > 0) {
-        damage.push_back({x, y, width, height});
+        pending_damage.push_back({x, y, width, height});
     }
     return {};
 }
@@ -762,17 +763,17 @@ auto surface_object::request_frame(object_id callback) -> result<void> {
     if (callback == 0) {
         return std::unexpected(make_error(error_code::protocol, "frame callback id is zero"));
     }
-    frame_callbacks.push_back(callback);
+    pending_frame_callbacks.push_back(callback);
     return {};
 }
 
 auto surface_object::request_set_opaque_region(object_id region) -> result<void> {
-    opaque_region = region;
+    pending_opaque_region = region;
     return {};
 }
 
 auto surface_object::request_set_input_region(object_id region) -> result<void> {
-    input_region = region;
+    pending_input_region = region;
     return {};
 }
 
@@ -780,6 +781,16 @@ auto surface_object::request_commit() -> result<void> {
     if (auto configured = core->configure_layer_surface(id); !configured) {
         return std::unexpected(configured.error());
     }
+    if (buffer_pending) {
+        buffer = pending_buffer;
+        buffer_pending = false;
+    }
+    offset_x = pending_offset_x;
+    offset_y = pending_offset_y;
+    buffer_scale = pending_buffer_scale;
+    buffer_transform = pending_buffer_transform;
+    opaque_region = pending_opaque_region;
+    input_region = pending_input_region;
     surface_commit_event event{.surface = id, .buffer = buffer};
     if (buffer != 0) {
         const buffer_object* committed = core->buffer(buffer);
@@ -813,7 +824,7 @@ auto surface_object::request_commit() -> result<void> {
     current_buffer = buffer;
     core->notify_commit(event);
 
-    for (const object_id callback : frame_callbacks) {
+    for (const object_id callback : pending_frame_callbacks) {
         auto deferred = core->queue_frame_callback(callback);
         if (!deferred) {
             return std::unexpected(deferred.error());
@@ -826,13 +837,13 @@ auto surface_object::request_commit() -> result<void> {
             return std::unexpected(sent.error());
         }
     }
-    frame_callbacks.clear();
-    damage.clear();
+    pending_frame_callbacks.clear();
+    pending_damage.clear();
     return {};
 }
 
 auto surface_object::request_set_buffer_transform(i32 transform) -> result<void> {
-    buffer_transform = transform;
+    pending_buffer_transform = transform;
     return {};
 }
 
@@ -840,7 +851,7 @@ auto surface_object::request_set_buffer_scale(i32 scale) -> result<void> {
     if (scale <= 0) {
         return std::unexpected(make_error(error_code::protocol, "buffer scale is invalid"));
     }
-    buffer_scale = scale;
+    pending_buffer_scale = scale;
     return {};
 }
 
@@ -849,8 +860,8 @@ auto surface_object::request_damage_buffer(i32 x, i32 y, i32 width, i32 height) 
 }
 
 auto surface_object::request_offset(i32 x, i32 y) -> result<void> {
-    offset_x = x;
-    offset_y = y;
+    pending_offset_x = x;
+    pending_offset_y = y;
     return {};
 }
 

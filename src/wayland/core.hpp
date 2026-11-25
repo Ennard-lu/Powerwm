@@ -442,8 +442,16 @@ struct surface_object {
     i32 offset_y = 0;
     i32 buffer_scale = 1;
     i32 buffer_transform = 0;
-    std::vector<base::recti> damage;
-    std::vector<object_id> frame_callbacks;
+    object_id pending_buffer = 0;
+    bool buffer_pending = false;
+    object_id pending_opaque_region = 0;
+    object_id pending_input_region = 0;
+    i32 pending_offset_x = 0;
+    i32 pending_offset_y = 0;
+    i32 pending_buffer_scale = 1;
+    i32 pending_buffer_transform = 0;
+    std::vector<base::recti> pending_damage;
+    std::vector<object_id> pending_frame_callbacks;
 
     [[nodiscard]] auto request_destroy() -> result<void>;
     [[nodiscard]] auto request_attach(object_id buffer, i32 x, i32 y) -> result<void>;

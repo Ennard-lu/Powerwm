@@ -803,17 +803,6 @@ auto test_shm_commit() -> bool {
     static_cast<void>(requests.write_i32(static_cast<i32>(stride)));
     static_cast<void>(requests.write_u32(0));
     static_cast<void>(requests.end_message());
-    static_cast<void>(requests.begin_message(5, 1));
-    static_cast<void>(requests.write_object(7));
-    static_cast<void>(requests.write_i32(0));
-    static_cast<void>(requests.write_i32(0));
-    static_cast<void>(requests.end_message());
-    static_cast<void>(requests.begin_message(5, 3));
-    static_cast<void>(requests.write_new_id(8));
-    static_cast<void>(requests.end_message());
-    static_cast<void>(requests.begin_message(5, 6));
-    static_cast<void>(requests.end_message());
-
     auto sent = client.send(requests.bytes(), requests.fds());
     if (!sent || sent->bytes != requests.bytes().size()) {
         return false;
@@ -822,7 +811,31 @@ auto test_shm_commit() -> bool {
         return false;
     }
     auto dispatched = server.dispatch_available();
-    if (!dispatched || *dispatched != 9) {
+    if (!dispatched || *dispatched != 6 || capture.surface != 0) {
+        return false;
+    }
+
+    wayland::protocol_writer commit;
+    static_cast<void>(commit.begin_message(5, 1));
+    static_cast<void>(commit.write_object(7));
+    static_cast<void>(commit.write_i32(0));
+    static_cast<void>(commit.write_i32(0));
+    static_cast<void>(commit.end_message());
+    static_cast<void>(commit.begin_message(5, 3));
+    static_cast<void>(commit.write_new_id(8));
+    static_cast<void>(commit.end_message());
+    static_cast<void>(commit.begin_message(5, 6));
+    static_cast<void>(commit.end_message());
+
+    auto committed = client.send(commit.bytes(), commit.fds());
+    if (!committed || committed->bytes != commit.bytes().size()) {
+        return false;
+    }
+    if (!server.receive_available()) {
+        return false;
+    }
+    auto commit_dispatched = server.dispatch_available();
+    if (!commit_dispatched || *commit_dispatched != 3) {
         return false;
     }
     if (!server.flush()) {

@@ -65,7 +65,8 @@ Working today:
 - `linux-dmabuf-v1` with Vulkan DMA-BUF import for surface rendering
 - `wlr-layer-shell-unstable-v1` panels, bars, and overlays
 - coroutine `task<T>` client sessions, page-flip frame callbacks, buffer release,
-  primary selection, object-id/version validation, and deterministic wire/XML fuzzing
+  primary selection, object-id/version validation, pending/current surface state, and
+  deterministic wire/XML fuzzing
 - real GTK4 client connects and commits a shm window
 
 Still ahead:

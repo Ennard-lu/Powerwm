@@ -184,6 +184,8 @@ libwayland.
 - [x] `wlr-layer-shell-unstable-v1` surfaces with layer, anchor, size, margin,
   exclusive zone, keyboard interactivity, configure, and ack;
 - [x] client-id range, registry bind version, and duplicate-id validation;
+- [x] pending/current surface state for buffers, offsets, regions, scale, transform,
+  damage, and frame callbacks;
 - [ ] destruction lifetime and per-client state audit;
 - [x] coroutine `task<T>` and a per-client session coroutine in the KMS compositor;
 - [x] frame callbacks deferred to the next KMS page flip and `wl_buffer.release`
