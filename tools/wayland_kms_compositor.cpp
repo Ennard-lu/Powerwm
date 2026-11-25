@@ -466,6 +466,7 @@ auto accept_client(compositor_state& state) -> void {
                                     state.output->mode.refresh_hz());
     session->display.set_surface_commit_callback(on_client_commit, session.get());
     session->display.set_presentation_feedback_callback(on_presentation_feedback, session.get());
+    session->display.set_defer_frame_callbacks(true);
     session->display.set_data_source_callback(on_data_source, session.get());
     session->display.set_data_source_destroyed_callback(on_data_source_destroyed, session.get());
     session->display.set_data_offer_receive_callback(on_data_offer_receive, session.get());
@@ -821,6 +822,16 @@ auto render_next_frame(compositor_state& state) -> pwm::result<void> {
     return {};
 }
 
+auto flush_frame_callbacks(compositor_state& state) -> void {
+    for (const auto& session : state.clients) {
+        if (session->closed) {
+            continue;
+        }
+        static_cast<void>(session->display.flush_frame_callbacks());
+        static_cast<void>(session->connection.flush());
+    }
+}
+
 auto flush_presentation_feedback(compositor_state& state) -> void {
     if (state.pending_presentations.empty()) {
         return;
@@ -847,6 +858,7 @@ auto on_page_flip(void* context) -> void {
     auto& state = *static_cast<compositor_state*>(context);
     state.waiting_for_flip = false;
     state.waiting_ticks = 0;
+    flush_frame_callbacks(state);
     flush_presentation_feedback(state);
 }
 

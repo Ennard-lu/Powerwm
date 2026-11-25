@@ -752,9 +752,22 @@ auto surface_object::request_commit() -> result<void> {
             event.modifier = committed->modifier;
         }
     }
+    if (current_buffer != 0 && current_buffer != buffer) {
+        if (auto released = core->send_buffer_release(current_buffer); !released) {
+            return std::unexpected(released.error());
+        }
+    }
+    current_buffer = buffer;
     core->notify_commit(event);
 
     for (const object_id callback : frame_callbacks) {
+        auto deferred = core->queue_frame_callback(callback);
+        if (!deferred) {
+            return std::unexpected(deferred.error());
+        }
+        if (*deferred) {
+            continue;
+        }
         if (auto sent = core->service().send_callback_done(callback, core->service().next_serial());
             !sent) {
             return std::unexpected(sent.error());
@@ -965,6 +978,47 @@ auto core_protocol::create_pool(object_id id, handle_t fd, i32 size) -> result<v
         store(pools_, shm_pool_object{this, id, std::move(owned), size, std::move(*mapping)});
     return add_object<shm_pool_object, generated::wl_shm_pool>(service_->connection_ref().objects(),
                                                                id, *object);
+}
+
+auto core_protocol::send_buffer_release(object_id buffer) -> result<void> {
+    if (buffer == 0 || this->buffer(buffer) == nullptr) {
+        return {};
+    }
+    generated::wl_buffer::event_release event{};
+    protocol_writer writer;
+    if (auto encoded = generated::wl_buffer::event_release::encode(writer, buffer, event);
+        !encoded) {
+        return std::unexpected(encoded.error());
+    }
+    return service_->queue_event(writer);
+}
+
+auto core_protocol::set_defer_frame_callbacks(bool value) noexcept -> void {
+    defer_frame_callbacks_ = value;
+}
+
+auto core_protocol::queue_frame_callback(object_id callback) -> result<bool> {
+    if (!defer_frame_callbacks_) {
+        return false;
+    }
+    deferred_frame_callbacks_.push_back(callback);
+    return true;
+}
+
+auto core_protocol::flush_frame_callbacks() -> result<void> {
+    if (deferred_frame_callbacks_.empty()) {
+        return {};
+    }
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                         std::chrono::steady_clock::now().time_since_epoch())
+                         .count();
+    for (const object_id callback : deferred_frame_callbacks_) {
+        if (auto sent = service_->send_callback_done(callback, static_cast<u32>(now)); !sent) {
+            return std::unexpected(sent.error());
+        }
+    }
+    deferred_frame_callbacks_.clear();
+    return {};
 }
 
 auto core_protocol::allocate_server_object_id() noexcept -> object_id {

@@ -208,6 +208,10 @@ class display_service {
 
     [[nodiscard]] auto send_selection(object_id offer) -> result<void>;
 
+    auto set_defer_frame_callbacks(bool value) noexcept -> void;
+
+    [[nodiscard]] auto flush_frame_callbacks() -> result<void>;
+
     [[nodiscard]] auto layer_geometry(object_id surface, u32 output_width, u32 output_height,
                                       i32 buffer_width, i32 buffer_height) const
         -> std::optional<layer_surface_geometry>;

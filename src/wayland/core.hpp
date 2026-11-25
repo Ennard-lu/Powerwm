@@ -397,6 +397,7 @@ struct surface_object {
     core_protocol* core = nullptr;
     object_id id = 0;
     object_id buffer = 0;
+    object_id current_buffer = 0;
     object_id opaque_region = 0;
     object_id input_region = 0;
     i32 offset_x = 0;
@@ -447,6 +448,10 @@ class core_protocol {
     [[nodiscard]] auto send_linux_buffer_created(object_id params, object_id buffer)
         -> result<void>;
     [[nodiscard]] auto send_linux_buffer_failed(object_id params) -> result<void>;
+    auto set_defer_frame_callbacks(bool value) noexcept -> void;
+    [[nodiscard]] auto queue_frame_callback(object_id callback) -> result<bool>;
+    [[nodiscard]] auto flush_frame_callbacks() -> result<void>;
+    [[nodiscard]] auto send_buffer_release(object_id buffer) -> result<void>;
 
     auto configure_output(u32 width, u32 height, u32 refresh_hz) noexcept -> void;
 
@@ -570,6 +575,8 @@ class core_protocol {
     surface_commit_callback commit_callback_ = nullptr;
     void* commit_context_ = nullptr;
     object_id next_server_id_ = 0xff000000;
+    bool defer_frame_callbacks_ = false;
+    std::vector<object_id> deferred_frame_callbacks_;
 };
 
 }

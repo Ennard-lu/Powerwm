@@ -185,6 +185,8 @@ libwayland.
   exclusive zone, keyboard interactivity, configure, and ack;
 - [ ] client IDs, interface versions, destruction lifetime, per-client state;
 - [x] coroutine `task<T>` and a per-client session coroutine in the KMS compositor;
+- [x] frame callbacks deferred to the next KMS page flip and `wl_buffer.release`
+  after the surface switches buffers;
 - [ ] event loop coroutine scheduler, cancellation, timers;
 - [x] in-tree socket handshake and raw-wire client verification;
 - [x] in-tree socket handshake, shm surface commit, and KMS presentation;

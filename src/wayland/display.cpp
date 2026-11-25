@@ -445,6 +445,14 @@ auto display_service::send_selection(object_id offer) -> result<void> {
     return core_.send_selection(offer);
 }
 
+auto display_service::set_defer_frame_callbacks(bool value) noexcept -> void {
+    core_.set_defer_frame_callbacks(value);
+}
+
+auto display_service::flush_frame_callbacks() -> result<void> {
+    return core_.flush_frame_callbacks();
+}
+
 auto display_service::layer_geometry(object_id surface, u32 output_width, u32 output_height,
                                      i32 buffer_width, i32 buffer_height) const
     -> std::optional<layer_surface_geometry> {
