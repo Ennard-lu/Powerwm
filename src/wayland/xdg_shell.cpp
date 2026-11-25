@@ -9,6 +9,29 @@
 
 namespace pwm::wayland {
 
+namespace {
+
+template <typename T>
+auto discard_entry(std::vector<std::unique_ptr<T>>& objects, object_id id) -> bool {
+    const auto iterator = std::ranges::find_if(
+        objects, [id](const std::unique_ptr<T>& object) { return object->id == id; });
+    if (iterator == objects.end()) {
+        return false;
+    }
+    objects.erase(iterator);
+    return true;
+}
+
+}
+
+auto xdg_shell_protocol::discard_object(object_id id) noexcept -> void {
+    static_cast<void>(discard_entry(wm_bases_, id));
+    static_cast<void>(discard_entry(positioners_, id));
+    static_cast<void>(discard_entry(surfaces_, id));
+    static_cast<void>(discard_entry(toplevels_, id));
+    static_cast<void>(discard_entry(popups_, id));
+}
+
 auto xdg_positioner_object::request_destroy() -> result<void> {
     return shell->service().destroy_object(id);
 }

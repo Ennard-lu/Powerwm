@@ -895,13 +895,14 @@ auto present_frame(compositor_state& state, pwm::u32 index) -> pwm::result<void>
     if (!request) {
         return std::unexpected(request.error());
     }
-    add_output_properties(state, *(*state.framebuffers)[index], request.value());
+    auto owned_request = pwm::raii{std::move(*request)};
+    add_output_properties(state, *(*state.framebuffers)[index], owned_request.value());
 
     pwm::u32 flags = drm::atomic_page_flip_event | drm::atomic_nonblock;
     if (state.allow_modeset) {
         flags |= drm::atomic_allow_modeset;
     }
-    auto committed = state.device->commit_atomic(request.value(), flags);
+    auto committed = state.device->commit_atomic(owned_request.value(), flags);
     if (!committed) {
         return std::unexpected(committed.error());
     }
@@ -989,6 +990,8 @@ auto reset_after_session_change(compositor_state& state, bool enabled) -> void {
 
 auto on_timer(void* context, event::poll_event) -> void {
     auto& state = *static_cast<compositor_state*>(context);
+    std::erase_if(state.clients,
+                  [](const std::unique_ptr<client_session>& session) { return session->closed; });
     auto expirations = state.timer->read_expirations();
     if (!expirations) {
         std::println(stderr, "timer error: {}", expirations.error().message);

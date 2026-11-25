@@ -129,6 +129,8 @@ class xdg_shell_protocol {
 
     [[nodiscard]] auto service() noexcept -> display_service&;
 
+    auto discard_object(object_id id) noexcept -> void;
+
   private:
     template <typename T>
     auto store(std::vector<std::unique_ptr<T>>& objects, T object) -> T* {

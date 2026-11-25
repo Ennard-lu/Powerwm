@@ -187,7 +187,8 @@ libwayland.
 - [x] pending/current surface state for buffers, offsets, regions, scale, transform,
   damage, and frame callbacks;
 - [x] viewport destination sizes and buffer scale applied to scene bounds;
-- [ ] destruction lifetime and per-client state audit;
+- [x] destroyed objects are reclaimed from owner storage; idle DRM atomic requests are
+  released per frame, keeping RSS flat;
 - [x] coroutine `task<T>` and a per-client session coroutine in the KMS compositor;
 - [x] frame callbacks deferred to the next KMS page flip and `wl_buffer.release`
   after the surface switches buffers;

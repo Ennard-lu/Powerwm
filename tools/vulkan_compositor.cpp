@@ -240,13 +240,14 @@ auto present_frame(compositor_state& state, pwm::u32 index) -> pwm::result<void>
     if (!request) {
         return std::unexpected(request.error());
     }
-    add_output_properties(state, *(*state.framebuffers)[index], request.value());
+    auto owned_request = pwm::raii{std::move(*request)};
+    add_output_properties(state, *(*state.framebuffers)[index], owned_request.value());
 
     pwm::u32 flags = drm::atomic_page_flip_event | drm::atomic_nonblock;
     if (state.allow_modeset) {
         flags |= drm::atomic_allow_modeset;
     }
-    auto committed = state.device->commit_atomic(request.value(), flags);
+    auto committed = state.device->commit_atomic(owned_request.value(), flags);
     if (!committed) {
         return std::unexpected(committed.error());
     }

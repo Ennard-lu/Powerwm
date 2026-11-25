@@ -85,6 +85,7 @@ auto on_client(void* context, event::poll_event) -> void {
         close_client(session);
         return;
     }
+    session.display.process_discards();
     auto flushed = session.connection.flush();
     if (!flushed) {
         std::println(stderr, "client {} flush error: {}", session.index, flushed.error().message);

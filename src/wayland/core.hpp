@@ -509,6 +509,7 @@ class core_protocol {
                                                 handle_t fd) -> result<void>;
     [[nodiscard]] auto send_primary_source_cancelled(object_id source) -> result<void>;
     auto set_defer_frame_callbacks(bool value) noexcept -> void;
+    auto discard_object(object_id id) noexcept -> void;
     [[nodiscard]] auto queue_frame_callback(object_id callback) -> result<bool>;
     [[nodiscard]] auto flush_frame_callbacks() -> result<void>;
     [[nodiscard]] auto send_buffer_release(object_id buffer) -> result<void>;

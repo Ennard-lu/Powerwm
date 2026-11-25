@@ -100,6 +100,9 @@ pre-1.0 `0.x.y` convention.
   and frame callbacks, applied on commit.
 - Viewport destination sizes and buffer scale applied to scene bounds, with buffer-size
   bounds refreshed on every commit.
+- Destroyed Wayland objects are reclaimed from their owner vectors, closed client sessions
+  are reaped, and DRM atomic requests are released every frame; TTY3 soak runs keep RSS
+  constant.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

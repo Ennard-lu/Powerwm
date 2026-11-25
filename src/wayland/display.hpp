@@ -153,6 +153,10 @@ class display_service {
 
     [[nodiscard]] auto destroy_object(object_id id) -> result<void>;
 
+    auto queue_discard(object_id id) noexcept -> void;
+
+    auto process_discards() noexcept -> void;
+
     [[nodiscard]] auto bind_global(std::string_view interface, object_id id, u32 version)
         -> result<void>;
 
@@ -358,6 +362,7 @@ class display_service {
     std::vector<registry_global> globals_;
     u32 next_global_name_ = 1;
     u32 next_serial_ = 1;
+    std::vector<object_id> pending_discards_;
 };
 
 }

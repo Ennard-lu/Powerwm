@@ -1,7 +1,7 @@
 # Phase 1 validation checklist
 
 > Status: implementation complete; hardware validation in progress. TTY3 passed 1200
-> frames and 10 VT switches.
+> frames, 10 VT switches, and Wayland/KMS soak runs with steady resident memory.
 
 ## 1. Build and static checks
 
@@ -90,6 +90,7 @@ resume worked, and all 1200 frames completed.
 | Display hotplug | 10 HDMI/DP cycles | runtime restarts safely, no leaks |
 | Idle CPU | 60 s sampling after animation | < 1% of one core |
 | Resource release | inspect fds/DRM objects after exit | no leftovers |
+| Client object churn | repeated shm pool/buffer creation | object table and RSS stay flat |
 | Multi-output | two connected connectors | primary works, no crash |
 | Input hotplug | plug/unplug keyboard/mouse | libinput discovers/removes devices |
 
@@ -103,6 +104,8 @@ resume worked, and all 1200 frames completed.
 | `powerwm_seat_probe` | pass on TTY3 + logind |
 | DRM animation | pass, 1200 frames |
 | VT switching | pass, 10 cycles |
+| Wayland + GTK4 soak | pass, 3000 frames in 67 s, no protocol errors |
+| Resident memory | pass, 21144 KB constant across 1500 GTK4 frames |
 | Hotplug / 50 VT / 1 hour | pending |
 | Vulkan DMA-BUF to KMS | pass, TTY3 presentation |
 

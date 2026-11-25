@@ -24,6 +24,17 @@ namespace pwm::wayland {
 
 namespace {
 
+template <typename T>
+auto discard_entry(std::vector<std::unique_ptr<T>>& objects, object_id id) -> bool {
+    const auto iterator = std::ranges::find_if(
+        objects, [id](const std::unique_ptr<T>& object) { return object->id == id; });
+    if (iterator == objects.end()) {
+        return false;
+    }
+    objects.erase(iterator);
+    return true;
+}
+
 auto valid_buffer_size(const shm_pool_object& pool, i32 offset, i32 width, i32 height, i32 stride)
     -> bool {
     if (width <= 0 || height <= 0 || offset < 0 ||
@@ -44,6 +55,7 @@ auto primary_source_object::request_offer(std::string_view mime) -> result<void>
 auto primary_source_object::request_destroy() -> result<void> {
     core->service().notify_primary_source_destroyed(id);
     core->service().connection_ref().objects().remove(id);
+    core->service().queue_discard(id);
     return {};
 }
 
@@ -59,6 +71,7 @@ auto primary_offer_object::request_receive(std::string_view mime, handle_t fd) -
 
 auto primary_offer_object::request_destroy() -> result<void> {
     core->service().connection_ref().objects().remove(id);
+    core->service().queue_discard(id);
     return {};
 }
 
@@ -601,6 +614,7 @@ auto data_offer_object::request_receive(std::string_view mime, handle_t fd) -> r
 
 auto data_offer_object::request_destroy() -> result<void> {
     core->service().connection_ref().objects().remove(id);
+    core->service().queue_discard(id);
     return {};
 }
 
@@ -630,6 +644,7 @@ auto data_source_object::request_offer(std::string_view mime) -> result<void> {
 auto data_source_object::request_destroy() -> result<void> {
     core->service().notify_data_source_destroyed(id);
     core->service().connection_ref().objects().remove(id);
+    core->service().queue_discard(id);
     return {};
 }
 
@@ -704,6 +719,7 @@ auto region_object::request_destroy() -> result<void> {
 auto buffer_object::request_destroy() -> result<void> {
     if (server_created) {
         core->service().connection_ref().objects().remove(id);
+        core->service().queue_discard(id);
         return {};
     }
     return core->service().destroy_object(id);
@@ -1064,6 +1080,46 @@ auto core_protocol::send_buffer_release(object_id buffer) -> result<void> {
         return std::unexpected(encoded.error());
     }
     return service_->queue_event(writer);
+}
+
+auto core_protocol::discard_object(object_id id) noexcept -> void {
+    static_cast<void>(discard_entry(compositors_, id));
+    static_cast<void>(discard_entry(regions_, id));
+    static_cast<void>(discard_entry(buffers_, id));
+    static_cast<void>(discard_entry(pools_, id));
+    static_cast<void>(discard_entry(shms_, id));
+    static_cast<void>(discard_entry(surfaces_, id));
+    static_cast<void>(discard_entry(outputs_, id));
+    static_cast<void>(discard_entry(seats_, id));
+    static_cast<void>(discard_entry(pointers_, id));
+    static_cast<void>(discard_entry(keyboards_, id));
+    static_cast<void>(discard_entry(touches_, id));
+    static_cast<void>(discard_entry(presentations_, id));
+    static_cast<void>(discard_entry(presentation_feedbacks_, id));
+    static_cast<void>(discard_entry(activations_, id));
+    static_cast<void>(discard_entry(activation_tokens_, id));
+    static_cast<void>(discard_entry(viewporters_, id));
+    static_cast<void>(discard_entry(viewports_, id));
+    static_cast<void>(discard_entry(fractional_scale_managers_, id));
+    static_cast<void>(discard_entry(fractional_scales_, id));
+    static_cast<void>(discard_entry(decoration_managers_, id));
+    static_cast<void>(discard_entry(toplevel_decorations_, id));
+    static_cast<void>(discard_entry(xdg_output_managers_, id));
+    static_cast<void>(discard_entry(xdg_outputs_, id));
+    static_cast<void>(discard_entry(subcompositors_, id));
+    static_cast<void>(discard_entry(subsurfaces_, id));
+    static_cast<void>(discard_entry(data_managers_, id));
+    static_cast<void>(discard_entry(data_devices_, id));
+    static_cast<void>(discard_entry(data_sources_, id));
+    static_cast<void>(discard_entry(data_offers_, id));
+    static_cast<void>(discard_entry(linux_dmabufs_, id));
+    static_cast<void>(discard_entry(linux_buffer_params_, id));
+    static_cast<void>(discard_entry(layer_shells_, id));
+    static_cast<void>(discard_entry(layer_surfaces_, id));
+    static_cast<void>(discard_entry(primary_managers_, id));
+    static_cast<void>(discard_entry(primary_devices_, id));
+    static_cast<void>(discard_entry(primary_sources_, id));
+    static_cast<void>(discard_entry(primary_offers_, id));
 }
 
 auto core_protocol::set_defer_frame_callbacks(bool value) noexcept -> void {

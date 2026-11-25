@@ -70,7 +70,20 @@ auto display_service::destroy_object(object_id id) -> result<void> {
         return std::unexpected(
             make_error(error_code::protocol, "destroy references an unknown object"));
     }
+    queue_discard(id);
     return send_delete_id(id);
+}
+
+auto display_service::queue_discard(object_id id) noexcept -> void {
+    pending_discards_.push_back(id);
+}
+
+auto display_service::process_discards() noexcept -> void {
+    for (const object_id id : pending_discards_) {
+        core_.discard_object(id);
+        xdg_.discard_object(id);
+    }
+    pending_discards_.clear();
 }
 
 auto display_service::bind_global(std::string_view interface, object_id id, u32 version)

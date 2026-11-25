@@ -292,14 +292,15 @@ auto commit_frame(drm::device& device, const drm::output_target& output,
     if (!request) {
         return std::unexpected(request.error());
     }
-    add_crtc_and_connector_properties(output, ids, blob, request.value());
-    add_plane_properties(output, ids, framebuffer, request.value());
+    auto owned_request = pwm::raii{std::move(*request)};
+    add_crtc_and_connector_properties(output, ids, blob, owned_request.value());
+    add_plane_properties(output, ids, framebuffer, owned_request.value());
 
     pwm::u32 flags = drm::atomic_page_flip_event | drm::atomic_nonblock;
     if (allow_modeset) {
         flags |= drm::atomic_allow_modeset;
     }
-    return device.commit_atomic(request.value(), flags);
+    return device.commit_atomic(owned_request.value(), flags);
 }
 
 auto print_event(const input::input_event& input_event) -> void {
