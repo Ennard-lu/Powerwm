@@ -162,6 +162,22 @@ auto on_client_commit(void* context, const wayland::surface_commit_event& commit
         session.compositor->output->mode.height_px(), commit.width, commit.height);
     if (layer) {
         static_cast<void>(session.compositor->scene->set_surface_bounds(key, layer->bounds));
+    } else {
+        auto bounds = session.compositor->scene->surface_bounds(key);
+        if (bounds) {
+            if (const auto destination = session.display.viewport_destination(commit.surface);
+                destination) {
+                bounds->width = destination->width;
+                bounds->height = destination->height;
+            } else {
+                const pwm::i32 scale = session.display.surface_buffer_scale(commit.surface);
+                if (scale > 1) {
+                    bounds->width = (bounds->width + scale - 1) / scale;
+                    bounds->height = (bounds->height + scale - 1) / scale;
+                }
+            }
+            static_cast<void>(session.compositor->scene->set_surface_bounds(key, *bounds));
+        }
     }
     if (!layer || layer->keyboard_interactive) {
         static_cast<void>(session.display.send_keyboard_enter(commit.surface));

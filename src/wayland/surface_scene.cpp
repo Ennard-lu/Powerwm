@@ -95,9 +95,9 @@ auto surface_scene::on_commit(u64 surface_key, const surface_commit_event& event
         base::recti bounds = entry.bounds;
         if (bounds.is_empty()) {
             bounds = next_cascade();
-            bounds.width = event.width;
-            bounds.height = event.height;
         }
+        bounds.width = event.width;
+        bounds.height = event.height;
         entry.bounds = bounds;
         auto transaction = graph_.begin();
         transaction.move(entry.node, bounds);
@@ -144,9 +144,9 @@ auto surface_scene::on_commit(u64 surface_key, const surface_commit_event& event
     base::recti bounds = entry.bounds;
     if (bounds.is_empty()) {
         bounds = next_cascade();
-        bounds.width = event.width;
-        bounds.height = event.height;
     }
+    bounds.width = event.width;
+    bounds.height = event.height;
     entry.bounds = bounds;
     entry.buffer = event.buffer;
     auto transaction = graph_.begin();

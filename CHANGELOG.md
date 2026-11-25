@@ -98,6 +98,8 @@ pre-1.0 `0.x.y` convention.
   advertised interface and version.
 - Pending/current surface state for buffers, offsets, regions, scale, transform, damage,
   and frame callbacks, applied on commit.
+- Viewport destination sizes and buffer scale applied to scene bounds, with buffer-size
+  bounds refreshed on every commit.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

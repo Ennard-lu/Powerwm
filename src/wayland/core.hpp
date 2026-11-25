@@ -77,6 +77,8 @@ struct viewport_object {
     core_protocol* core = nullptr;
     object_id id = 0;
     object_id surface = 0;
+    i32 destination_width = 0;
+    i32 destination_height = 0;
 
     [[nodiscard]] auto request_destroy() -> result<void>;
     [[nodiscard]] auto request_set_source(f64 x, f64 y, f64 width, f64 height) -> result<void>;
@@ -487,6 +489,9 @@ class core_protocol {
     [[nodiscard]] auto create_layer_shell(object_id id, u32 version) -> result<void>;
     [[nodiscard]] auto create_layer_surface(object_id id, object_id surface, object_id output,
                                             u32 layer, std::string_view space) -> result<void>;
+    [[nodiscard]] auto viewport_destination(object_id surface) const -> std::optional<base::recti>;
+    [[nodiscard]] auto surface_buffer_scale(object_id surface) const noexcept -> i32;
+
     [[nodiscard]] auto layer_geometry(object_id surface, u32 output_width, u32 output_height,
                                       i32 buffer_width, i32 buffer_height) const
         -> std::optional<layer_surface_geometry>;

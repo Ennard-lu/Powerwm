@@ -232,6 +232,10 @@ class display_service {
 
     [[nodiscard]] auto flush_frame_callbacks() -> result<void>;
 
+    [[nodiscard]] auto viewport_destination(object_id surface) const -> std::optional<base::recti>;
+
+    [[nodiscard]] auto surface_buffer_scale(object_id surface) const noexcept -> i32;
+
     [[nodiscard]] auto layer_geometry(object_id surface, u32 output_width, u32 output_height,
                                       i32 buffer_width, i32 buffer_height) const
         -> std::optional<layer_surface_geometry>;

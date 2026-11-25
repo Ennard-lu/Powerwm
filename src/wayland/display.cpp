@@ -527,6 +527,14 @@ auto display_service::flush_frame_callbacks() -> result<void> {
     return core_.flush_frame_callbacks();
 }
 
+auto display_service::viewport_destination(object_id surface) const -> std::optional<base::recti> {
+    return core_.viewport_destination(surface);
+}
+
+auto display_service::surface_buffer_scale(object_id surface) const noexcept -> i32 {
+    return core_.surface_buffer_scale(surface);
+}
+
 auto display_service::layer_geometry(object_id surface, u32 output_width, u32 output_height,
                                      i32 buffer_width, i32 buffer_height) const
     -> std::optional<layer_surface_geometry> {

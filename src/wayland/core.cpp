@@ -372,8 +372,11 @@ auto viewport_object::request_set_source(f64 x, f64 y, f64 width, f64 height) ->
 }
 
 auto viewport_object::request_set_destination(i32 width, i32 height) -> result<void> {
-    static_cast<void>(width);
-    static_cast<void>(height);
+    if (width < 0 || height < 0) {
+        return std::unexpected(make_error(error_code::protocol, "viewport destination is invalid"));
+    }
+    destination_width = width;
+    destination_height = height;
     return {};
 }
 
@@ -1093,6 +1096,25 @@ auto core_protocol::flush_frame_callbacks() -> result<void> {
 
 auto core_protocol::allocate_server_object_id() noexcept -> object_id {
     return next_server_id_++;
+}
+
+auto core_protocol::viewport_destination(object_id surface) const -> std::optional<base::recti> {
+    for (const auto& viewport : viewports_) {
+        if (viewport->surface == surface && viewport->destination_width > 0 &&
+            viewport->destination_height > 0) {
+            return base::recti{0, 0, viewport->destination_width, viewport->destination_height};
+        }
+    }
+    return std::nullopt;
+}
+
+auto core_protocol::surface_buffer_scale(object_id surface) const noexcept -> i32 {
+    for (const auto& entry : surfaces_) {
+        if (entry->id == surface) {
+            return entry->buffer_scale;
+        }
+    }
+    return 1;
 }
 
 auto core_protocol::create_layer_shell(object_id id, u32 version) -> result<void> {

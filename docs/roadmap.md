@@ -186,6 +186,7 @@ libwayland.
 - [x] client-id range, registry bind version, and duplicate-id validation;
 - [x] pending/current surface state for buffers, offsets, regions, scale, transform,
   damage, and frame callbacks;
+- [x] viewport destination sizes and buffer scale applied to scene bounds;
 - [ ] destruction lifetime and per-client state audit;
 - [x] coroutine `task<T>` and a per-client session coroutine in the KMS compositor;
 - [x] frame callbacks deferred to the next KMS page flip and `wl_buffer.release`
