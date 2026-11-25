@@ -709,9 +709,18 @@ auto display_object::request_get_registry(object_id registry) -> result<void> {
 auto registry_object::request_bind(u32 name, std::string_view interface, u32 version,
                                    object_id new_id) -> result<void> {
     for (const auto& global : service->globals_) {
-        if (global.name == name && global.interface == interface) {
-            return service->bind_global(interface, new_id, version);
+        if (global.name != name) {
+            continue;
         }
+        if (global.interface != interface) {
+            return std::unexpected(
+                make_error(error_code::protocol, "registry bind interface does not match"));
+        }
+        if (version == 0 || version > global.version) {
+            return std::unexpected(
+                make_error(error_code::protocol, "registry bind version is out of range"));
+        }
+        return service->bind_global(interface, new_id, version);
     }
     return std::unexpected(
         make_error(error_code::protocol, "registry bind references an unknown global"));

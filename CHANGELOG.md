@@ -94,6 +94,8 @@ pre-1.0 `0.x.y` convention.
   a surface switches buffers.
 - `zwp_primary_selection_device_manager_v1` with compositor-brokered offers and file
   descriptor forwarding.
+- Client object ids are rejected outside the client range, and registry binds validate the
+  advertised interface and version.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

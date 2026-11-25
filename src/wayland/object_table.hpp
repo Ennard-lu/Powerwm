@@ -25,7 +25,8 @@ struct object_entry {
 class object_table {
   public:
     [[nodiscard]] auto add(object_id id, std::string_view interface_name, u32 version,
-                           void* implementation, object_dispatch dispatch) noexcept -> result<void>;
+                           void* implementation, object_dispatch dispatch,
+                           bool server_created = false) noexcept -> result<void>;
 
     [[nodiscard]] auto remove(object_id id) noexcept -> bool;
 
@@ -45,13 +46,15 @@ class object_table {
 };
 
 template <typename Implementation, typename Interface>
-[[nodiscard]] auto add_object(object_table& table, object_id id,
-                              Implementation& implementation) noexcept -> result<void> {
-    return table.add(id, Interface::name, Interface::version, &implementation,
-                     [](void* opaque, u16 opcode, protocol_reader& reader) -> result<void> {
-                         return dispatch_request<Implementation, Interface>(
-                             *static_cast<Implementation*>(opaque), opcode, reader);
-                     });
+[[nodiscard]] auto add_object(object_table& table, object_id id, Implementation& implementation,
+                              bool server_created = false) noexcept -> result<void> {
+    return table.add(
+        id, Interface::name, Interface::version, &implementation,
+        [](void* opaque, u16 opcode, protocol_reader& reader) -> result<void> {
+            return dispatch_request<Implementation, Interface>(
+                *static_cast<Implementation*>(opaque), opcode, reader);
+        },
+        server_created);
 }
 
 }

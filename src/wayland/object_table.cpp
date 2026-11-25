@@ -7,10 +7,15 @@
 namespace pwm::wayland {
 
 auto object_table::add(object_id id, std::string_view interface_name, u32 version,
-                       void* implementation, object_dispatch dispatch) noexcept -> result<void> {
+                       void* implementation, object_dispatch dispatch, bool server_created) noexcept
+    -> result<void> {
     if (id == 0 || implementation == nullptr || dispatch == nullptr) {
         return std::unexpected(
             make_error(error_code::invalid_argument, "object entry arguments are invalid"));
+    }
+    if (!server_created && id >= 0xff000000U) {
+        return std::unexpected(
+            make_error(error_code::protocol, "client object id is in the server range"));
     }
     if (find(id) != nullptr) {
         return std::unexpected(make_error(error_code::protocol, "object id is already registered"));

@@ -156,5 +156,5 @@ through a coroutine session, frame callbacks are deferred to the next page flip,
 buffers receive release events after a surface switches. Primary selection is brokered
 between clients. Deterministic fuzz cases cover message decoding and XML parsing.
 
-Multi-output layout and hotplug, client-id lifetime validation, and a broader real-client
+Multi-output layout and hotplug, destruction-lifetime auditing, and a broader real-client
 matrix are the next Phase 3 steps.

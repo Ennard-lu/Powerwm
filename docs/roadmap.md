@@ -183,7 +183,8 @@ libwayland.
   creation, and Vulkan DMA-BUF import (linear and modifier-tiled);
 - [x] `wlr-layer-shell-unstable-v1` surfaces with layer, anchor, size, margin,
   exclusive zone, keyboard interactivity, configure, and ack;
-- [ ] client IDs, interface versions, destruction lifetime, per-client state;
+- [x] client-id range, registry bind version, and duplicate-id validation;
+- [ ] destruction lifetime and per-client state audit;
 - [x] coroutine `task<T>` and a per-client session coroutine in the KMS compositor;
 - [x] frame callbacks deferred to the next KMS page flip and `wl_buffer.release`
   after the surface switches buffers;

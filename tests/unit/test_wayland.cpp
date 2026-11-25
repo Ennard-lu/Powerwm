@@ -2698,6 +2698,63 @@ auto test_primary_selection() -> bool {
     return received_text == payload_text;
 }
 
+auto test_object_validation() -> bool {
+    wayland::object_table table;
+    display_implementation implementation;
+    if (wayland::add_object<display_implementation, generated::wl_display>(table, 0,
+                                                                           implementation)) {
+        return false;
+    }
+    if (wayland::add_object<display_implementation, generated::wl_display>(table, 0xff000000U,
+                                                                           implementation)) {
+        return false;
+    }
+    if (!wayland::add_object<display_implementation, generated::wl_display>(table, 2,
+                                                                            implementation)) {
+        return false;
+    }
+
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-validation.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    const u32 compositor_global = display.add_global("wl_compositor", 4);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(compositor_global));
+    static_cast<void>(requests.write_string("wl_compositor"));
+    static_cast<void>(requests.write_u32(5));
+    static_cast<void>(requests.write_new_id(3));
+    static_cast<void>(requests.end_message());
+    auto sent = client.send(requests.bytes(), requests.fds());
+    if (!sent || !server.receive_available()) {
+        return false;
+    }
+    auto dispatched = server.dispatch_available();
+    return !dispatched && dispatched.error().code == pwm::error_code::protocol;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -2748,6 +2805,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_object_validation()) {
+        std::println(stderr, "object validation test failed");
         return EXIT_FAILURE;
     }
     if (!test_primary_selection()) {

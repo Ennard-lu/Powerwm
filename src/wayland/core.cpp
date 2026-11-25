@@ -1192,7 +1192,7 @@ auto core_protocol::create_primary_offer(u32 source_client, object_id source_obj
         store(primary_offers_, primary_offer_object{this, offer, source_client, source_object});
     object->mime_types.assign(mime_types.begin(), mime_types.end());
     if (auto added = add_object<primary_offer_object, generated::zwp_primary_selection_offer_v1>(
-            service_->connection_ref().objects(), offer, *object);
+            service_->connection_ref().objects(), offer, *object, true);
         !added) {
         return std::unexpected(added.error());
     }
@@ -1321,7 +1321,7 @@ auto core_protocol::create_dmabuf_buffer(object_id id, platform::wayland::file_d
     object->dmabuf_fd = std::move(fd);
     object->modifier = modifier;
     return add_object<buffer_object, generated::wl_buffer>(service_->connection_ref().objects(), id,
-                                                           *object);
+                                                           *object, server_created);
 }
 
 auto core_protocol::create_buffer(object_id id, object_id pool, i32 offset, i32 width, i32 height,
@@ -1387,7 +1387,7 @@ auto core_protocol::create_data_offer(u32 source_client, object_id source_object
         store(data_offers_, data_offer_object{this, offer, source_client, source_object});
     object->mime_types.assign(mime_types.begin(), mime_types.end());
     if (auto added = add_object<data_offer_object, generated::wl_data_offer>(
-            service_->connection_ref().objects(), offer, *object);
+            service_->connection_ref().objects(), offer, *object, true);
         !added) {
         return std::unexpected(added.error());
     }
