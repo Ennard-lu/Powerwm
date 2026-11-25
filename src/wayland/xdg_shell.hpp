@@ -8,6 +8,7 @@
 #include <wayland/wire.hpp>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -72,6 +73,10 @@ struct xdg_popup_object {
     object_id id = 0;
     object_id parent = 0;
     object_id positioner = 0;
+    i32 x = 0;
+    i32 y = 0;
+    i32 width = 0;
+    i32 height = 0;
 
     [[nodiscard]] auto request_destroy() -> result<void>;
     [[nodiscard]] auto request_grab(object_id seat, u32 serial) -> result<void>;
@@ -107,6 +112,11 @@ struct xdg_wm_base_object {
     [[nodiscard]] auto request_pong(u32 serial) -> result<void>;
 };
 
+struct popup_geometry {
+    object_id parent_surface = 0;
+    base::recti bounds{};
+};
+
 class xdg_shell_protocol {
   public:
     explicit xdg_shell_protocol(display_service& service) noexcept;
@@ -129,9 +139,14 @@ class xdg_shell_protocol {
 
     [[nodiscard]] auto service() noexcept -> display_service&;
 
+    [[nodiscard]] auto surface_popup_geometry(object_id popup_surface) const
+        -> std::optional<popup_geometry>;
+
     auto discard_object(object_id id) noexcept -> void;
 
   private:
+    friend struct xdg_popup_object;
+
     template <typename T>
     auto store(std::vector<std::unique_ptr<T>>& objects, T object) -> T* {
         auto held = std::make_unique<T>(std::move(object));

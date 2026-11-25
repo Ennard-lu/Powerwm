@@ -2768,6 +2768,135 @@ auto test_object_validation() -> bool {
     return !dispatched && dispatched.error().code == pwm::error_code::protocol;
 }
 
+auto test_popup_positioning() -> bool {
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-popup.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    const u32 compositor_global = display.add_global("wl_compositor", 4);
+    const u32 xdg_global = display.add_global("xdg_wm_base", 1);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    const auto bind_global = [&requests](u32 global, std::string_view interface, u32 version,
+                                         u32 id) {
+        static_cast<void>(requests.begin_message(2, 0));
+        static_cast<void>(requests.write_u32(global));
+        static_cast<void>(requests.write_string(interface));
+        static_cast<void>(requests.write_u32(version));
+        static_cast<void>(requests.write_new_id(id));
+        static_cast<void>(requests.end_message());
+    };
+    bind_global(compositor_global, "wl_compositor", 4, 3);
+    bind_global(xdg_global, "xdg_wm_base", 1, 4);
+    static_cast<void>(requests.begin_message(3, 0));
+    static_cast<void>(requests.write_new_id(5));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 2));
+    static_cast<void>(requests.write_new_id(6));
+    static_cast<void>(requests.write_object(5));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(6, 1));
+    static_cast<void>(requests.write_new_id(7));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 1));
+    static_cast<void>(requests.write_new_id(8));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(8, 1));
+    static_cast<void>(requests.write_i32(100));
+    static_cast<void>(requests.write_i32(50));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(8, 2));
+    static_cast<void>(requests.write_i32(10));
+    static_cast<void>(requests.write_i32(20));
+    static_cast<void>(requests.write_i32(30));
+    static_cast<void>(requests.write_i32(40));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(8, 3));
+    static_cast<void>(requests.write_u32(8));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(8, 4));
+    static_cast<void>(requests.write_u32(1));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(3, 0));
+    static_cast<void>(requests.write_new_id(9));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(4, 2));
+    static_cast<void>(requests.write_new_id(10));
+    static_cast<void>(requests.write_object(9));
+    static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(10, 2));
+    static_cast<void>(requests.write_new_id(11));
+    static_cast<void>(requests.write_object(6));
+    static_cast<void>(requests.write_object(8));
+    static_cast<void>(requests.end_message());
+
+    auto sent = client.send(requests.bytes(), requests.fds());
+    if (!sent || !server.receive_available() || !server.dispatch_available() || !server.flush()) {
+        return false;
+    }
+
+    std::vector<std::byte> input;
+    std::vector<pwm::handle_t> fds;
+    if (!drain_client(client, input, fds)) {
+        return false;
+    }
+    pwm::i32 x = 0;
+    pwm::i32 y = 0;
+    pwm::i32 width = 0;
+    pwm::i32 height = 0;
+    bool saw_popup_configure = false;
+    pwm::usize offset = 0;
+    while (offset + sizeof(wayland::message_header) <= input.size()) {
+        auto header = wayland::decode_header(std::span<const std::byte>{input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == 11 && header->opcode == 0) {
+            auto event = generated::xdg_popup::event_configure::decode(reader);
+            if (!event) {
+                return false;
+            }
+            x = std::get<0>(event->arguments);
+            y = std::get<1>(event->arguments);
+            width = std::get<2>(event->arguments);
+            height = std::get<3>(event->arguments);
+            saw_popup_configure = true;
+        }
+        offset += header->size;
+    }
+    if (!saw_popup_configure || x != 40 || y != 20 || width != 100 || height != 50) {
+        return false;
+    }
+    const auto placement = display.surface_popup_geometry(9);
+    return placement && placement->parent_surface == 5 && placement->bounds.x == 40 &&
+           placement->bounds.y == 20 && placement->bounds.width == 100 &&
+           placement->bounds.height == 50;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -2818,6 +2947,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_popup_positioning()) {
+        std::println(stderr, "popup positioning test failed");
         return EXIT_FAILURE;
     }
     if (!test_object_validation()) {

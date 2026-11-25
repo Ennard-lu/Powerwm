@@ -544,6 +544,11 @@ auto display_service::viewport_destination(object_id surface) const -> std::opti
     return core_.viewport_destination(surface);
 }
 
+auto display_service::surface_popup_geometry(object_id surface) const
+    -> std::optional<popup_geometry> {
+    return xdg_.surface_popup_geometry(surface);
+}
+
 auto display_service::surface_buffer_scale(object_id surface) const noexcept -> i32 {
     return core_.surface_buffer_scale(surface);
 }

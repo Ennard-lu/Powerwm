@@ -164,7 +164,19 @@ auto on_client_commit(void* context, const wayland::surface_commit_event& commit
         static_cast<void>(session.compositor->scene->set_surface_bounds(key, layer->bounds));
     } else {
         auto bounds = session.compositor->scene->surface_bounds(key);
-        if (bounds) {
+        if (const auto popup = session.display.surface_popup_geometry(commit.surface);
+            popup && bounds) {
+            const pwm::u64 parent_key = (static_cast<pwm::u64>(session.index) << 32U) |
+                                        static_cast<pwm::u64>(popup->parent_surface);
+            const auto parent = session.compositor->scene->surface_bounds(parent_key);
+            if (parent) {
+                bounds->x = parent->x + popup->bounds.x;
+                bounds->y = parent->y + popup->bounds.y;
+                bounds->width = popup->bounds.width > 0 ? popup->bounds.width : commit.width;
+                bounds->height = popup->bounds.height > 0 ? popup->bounds.height : commit.height;
+            }
+            static_cast<void>(session.compositor->scene->set_surface_bounds(key, *bounds));
+        } else if (bounds) {
             if (const auto destination = session.display.viewport_destination(commit.surface);
                 destination) {
                 bounds->width = destination->width;

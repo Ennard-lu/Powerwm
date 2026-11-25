@@ -240,6 +240,9 @@ class display_service {
 
     [[nodiscard]] auto surface_buffer_scale(object_id surface) const noexcept -> i32;
 
+    [[nodiscard]] auto surface_popup_geometry(object_id surface) const
+        -> std::optional<popup_geometry>;
+
     [[nodiscard]] auto layer_geometry(object_id surface, u32 output_width, u32 output_height,
                                       i32 buffer_width, i32 buffer_height) const
         -> std::optional<layer_surface_geometry>;

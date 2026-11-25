@@ -103,6 +103,8 @@ pre-1.0 `0.x.y` convention.
 - Destroyed Wayland objects are reclaimed from their owner vectors, closed client sessions
   are reaped, and DRM atomic requests are released every frame; TTY3 soak runs keep RSS
   constant.
+- `xdg_popup` placement computed from positioner size, anchor rect, anchor, gravity, and
+  offset, with repositioned handling and scene placement relative to the parent surface.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

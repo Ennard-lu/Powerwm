@@ -24,6 +24,40 @@ auto discard_entry(std::vector<std::unique_ptr<T>>& objects, object_id id) -> bo
 
 }
 
+auto xdg_shell_protocol::surface_popup_geometry(object_id popup_surface) const
+    -> std::optional<popup_geometry> {
+    object_id role = 0;
+    for (const auto& surface : surfaces_) {
+        if (surface->surface == popup_surface && surface->role != 0) {
+            role = surface->role;
+            break;
+        }
+    }
+    if (role == 0) {
+        return std::nullopt;
+    }
+    const xdg_popup_object* popup = nullptr;
+    for (const auto& candidate : popups_) {
+        if (candidate->id == role) {
+            popup = candidate.get();
+            break;
+        }
+    }
+    if (popup == nullptr || popup->parent == 0) {
+        return std::nullopt;
+    }
+    for (const auto& surface : surfaces_) {
+        if (surface->id == popup->parent) {
+            pwm::wayland::popup_geometry result{
+                .parent_surface = surface->surface,
+                .bounds = {popup->x, popup->y, popup->width, popup->height},
+            };
+            return result;
+        }
+    }
+    return std::nullopt;
+}
+
 auto xdg_shell_protocol::discard_object(object_id id) noexcept -> void {
     static_cast<void>(discard_entry(wm_bases_, id));
     static_cast<void>(discard_entry(positioners_, id));
@@ -167,9 +201,45 @@ auto xdg_popup_object::request_grab(object_id seat, u32 serial) -> result<void> 
     return {};
 }
 
+namespace {
+
+auto compute_popup_position(const xdg_positioner_object& positioner, i32& x, i32& y, i32& width,
+                            i32& height) -> void {
+    constexpr u32 anchor_bottom = 2;
+    constexpr u32 anchor_right = 8;
+    width = positioner.size.width;
+    height = positioner.size.height;
+    x = positioner.anchor_rect.x + positioner.offset_x;
+    y = positioner.anchor_rect.y + positioner.offset_y;
+    if ((positioner.anchor & anchor_right) != 0) {
+        x += positioner.anchor_rect.width;
+    }
+    if ((positioner.anchor & anchor_bottom) != 0) {
+        y += positioner.anchor_rect.height;
+    }
+    if ((positioner.gravity & anchor_right) != 0) {
+        x -= width;
+    }
+    if ((positioner.gravity & anchor_bottom) != 0) {
+        y -= height;
+    }
+}
+
+}
+
 auto xdg_popup_object::request_reposition(object_id positioner, u32 token) -> result<void> {
-    this->positioner = positioner;
-    return shell->send_repositioned(id, token);
+    for (const auto& candidate : shell->positioners_) {
+        if (candidate->id != positioner) {
+            continue;
+        }
+        compute_popup_position(*candidate, x, y, width, height);
+        if (auto configured = shell->send_popup_configure(id, x, y, width, height); !configured) {
+            return configured;
+        }
+        return shell->send_repositioned(id, token);
+    }
+    return std::unexpected(
+        make_error(error_code::protocol, "popup reposition references an unknown positioner"));
 }
 
 auto xdg_surface_object::request_destroy() -> result<void> {
@@ -264,6 +334,12 @@ auto xdg_shell_protocol::create_toplevel(object_id id, xdg_surface_object& surfa
 auto xdg_shell_protocol::create_popup(object_id id, object_id parent, object_id positioner,
                                       xdg_surface_object& surface) -> result<void> {
     auto* object = store(popups_, xdg_popup_object{this, id, parent, positioner});
+    for (const auto& candidate : positioners_) {
+        if (candidate->id == positioner) {
+            compute_popup_position(*candidate, object->x, object->y, object->width, object->height);
+            break;
+        }
+    }
     if (auto added = add_object<xdg_popup_object, generated::xdg_popup>(
             service_->connection_ref().objects(), id, *object);
         !added) {
@@ -271,7 +347,9 @@ auto xdg_shell_protocol::create_popup(object_id id, object_id parent, object_id 
     }
     surface.role = id;
     surface.configure_serial = service_->next_serial();
-    if (auto configured = send_popup_configure(id, 0, 0, 0, 0); !configured) {
+    if (auto configured =
+            send_popup_configure(id, object->x, object->y, object->width, object->height);
+        !configured) {
         return std::unexpected(configured.error());
     }
     return send_surface_configure(surface.id, surface.configure_serial);
