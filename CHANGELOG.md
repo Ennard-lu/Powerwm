@@ -105,6 +105,8 @@ pre-1.0 `0.x.y` convention.
   constant.
 - `xdg_popup` placement computed from positioner size, anchor rect, anchor, gravity, and
   offset, with repositioned handling and scene placement relative to the parent surface.
+- `wl_surface.enter` and `wl_surface.leave` events when a surface maps or unmaps on the
+  bound `wl_output` objects.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

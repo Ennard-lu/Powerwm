@@ -66,8 +66,8 @@ Working today:
 - `wlr-layer-shell-unstable-v1` panels, bars, and overlays
 - coroutine `task<T>` client sessions, page-flip frame callbacks, buffer release,
   primary selection, object-id/version validation, pending/current surface state, and
-  deterministic wire/XML fuzzing, steady-state object reclamation, and xdg_popup
-  placement
+  deterministic wire/XML fuzzing, steady-state object reclamation, xdg_popup placement,
+  and surface/output enter events
 - real GTK4 client connects and commits a shm window
 
 Still ahead:

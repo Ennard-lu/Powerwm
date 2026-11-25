@@ -454,6 +454,7 @@ struct surface_object {
     i32 pending_buffer_transform = 0;
     std::vector<base::recti> pending_damage;
     std::vector<object_id> pending_frame_callbacks;
+    bool mapped_outputs = false;
 
     [[nodiscard]] auto request_destroy() -> result<void>;
     [[nodiscard]] auto request_attach(object_id buffer, i32 x, i32 y) -> result<void>;
@@ -513,6 +514,7 @@ class core_protocol {
     [[nodiscard]] auto queue_frame_callback(object_id callback) -> result<bool>;
     [[nodiscard]] auto flush_frame_callbacks() -> result<void>;
     [[nodiscard]] auto send_buffer_release(object_id buffer) -> result<void>;
+    [[nodiscard]] auto send_surface_output_state(object_id surface, bool enter) -> result<void>;
 
     auto configure_output(u32 width, u32 height, u32 refresh_hz) noexcept -> void;
 

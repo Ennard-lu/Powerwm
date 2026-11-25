@@ -842,6 +842,12 @@ auto surface_object::request_commit() -> result<void> {
     }
     current_buffer = buffer;
     core->notify_commit(event);
+    if ((buffer != 0) != mapped_outputs) {
+        mapped_outputs = buffer != 0;
+        if (auto sent = core->send_surface_output_state(id, mapped_outputs); !sent) {
+            return std::unexpected(sent.error());
+        }
+    }
 
     for (const object_id callback : pending_frame_callbacks) {
         auto deferred = core->queue_frame_callback(callback);
@@ -1067,6 +1073,31 @@ auto core_protocol::create_pool(object_id id, handle_t fd, i32 size) -> result<v
         store(pools_, shm_pool_object{this, id, std::move(owned), size, std::move(*mapping)});
     return add_object<shm_pool_object, generated::wl_shm_pool>(service_->connection_ref().objects(),
                                                                id, *object);
+}
+
+auto core_protocol::send_surface_output_state(object_id surface, bool enter) -> result<void> {
+    for (const auto& output : outputs_) {
+        protocol_writer writer;
+        if (enter) {
+            generated::wl_surface::event_enter event{};
+            std::get<0>(event.arguments) = output->id;
+            if (auto encoded = generated::wl_surface::event_enter::encode(writer, surface, event);
+                !encoded) {
+                return std::unexpected(encoded.error());
+            }
+        } else {
+            generated::wl_surface::event_leave event{};
+            std::get<0>(event.arguments) = output->id;
+            if (auto encoded = generated::wl_surface::event_leave::encode(writer, surface, event);
+                !encoded) {
+                return std::unexpected(encoded.error());
+            }
+        }
+        if (auto queued = service_->queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    return {};
 }
 
 auto core_protocol::send_buffer_release(object_id buffer) -> result<void> {

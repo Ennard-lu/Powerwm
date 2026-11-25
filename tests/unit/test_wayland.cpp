@@ -44,6 +44,9 @@ using pwm::u16;
 using pwm::u32;
 using wayland::object_id;
 
+auto drain_client(transport::stream& client, std::vector<std::byte>& input,
+                  std::vector<pwm::handle_t>& fds) -> bool;
+
 struct display_implementation {
     u32 sync_callback = 0;
     u32 registry_id = 0;
@@ -753,6 +756,7 @@ auto test_shm_commit() -> bool {
     display.set_surface_commit_callback(capture_commit, &capture);
     const u32 compositor_global = display.add_global("wl_compositor", 4);
     const u32 shm_global = display.add_global("wl_shm", 1);
+    const u32 output_global = display.add_global("wl_output", 4);
 
     constexpr pwm::u32 width = 8;
     constexpr pwm::u32 height = 8;
@@ -787,6 +791,12 @@ auto test_shm_commit() -> bool {
     static_cast<void>(requests.write_u32(1));
     static_cast<void>(requests.write_new_id(4));
     static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(2, 0));
+    static_cast<void>(requests.write_u32(output_global));
+    static_cast<void>(requests.write_string("wl_output"));
+    static_cast<void>(requests.write_u32(4));
+    static_cast<void>(requests.write_new_id(9));
+    static_cast<void>(requests.end_message());
     static_cast<void>(requests.begin_message(3, 0));
     static_cast<void>(requests.write_new_id(5));
     static_cast<void>(requests.end_message());
@@ -811,7 +821,7 @@ auto test_shm_commit() -> bool {
         return false;
     }
     auto dispatched = server.dispatch_available();
-    if (!dispatched || *dispatched != 6 || capture.surface != 0) {
+    if (!dispatched || *dispatched != 7 || capture.surface != 0) {
         return false;
     }
 
@@ -842,7 +852,34 @@ auto test_shm_commit() -> bool {
         return false;
     }
 
-    return capture.surface == 5 && capture.buffer == 7 && capture.width == width &&
+    std::vector<std::byte> events;
+    std::vector<pwm::handle_t> event_fds;
+    if (!drain_client(client, events, event_fds)) {
+        return false;
+    }
+    bool saw_enter = false;
+    pwm::usize event_offset = 0;
+    while (event_offset + sizeof(wayland::message_header) <= events.size()) {
+        auto header =
+            wayland::decode_header(std::span<const std::byte>{events}.subspan(event_offset));
+        if (!header) {
+            return false;
+        }
+        if (header->object == 5 && header->opcode == 0) {
+            const auto payload = std::span<const std::byte>{events}.subspan(
+                event_offset + sizeof(wayland::message_header),
+                header->size - sizeof(wayland::message_header));
+            wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+            auto event = generated::wl_surface::event_enter::decode(reader);
+            if (!event) {
+                return false;
+            }
+            saw_enter = std::get<0>(event->arguments) == 9;
+        }
+        event_offset += header->size;
+    }
+
+    return saw_enter && capture.surface == 5 && capture.buffer == 7 && capture.width == width &&
            capture.height == height && capture.stride == stride && capture.format == 0 &&
            capture.pixels.size() == pool_size && capture.pixels[0] == std::byte{0} &&
            capture.pixels[1] == std::byte{1} && capture.pixels[255] == std::byte{255};
