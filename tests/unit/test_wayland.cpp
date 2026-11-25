@@ -2855,6 +2855,12 @@ auto test_popup_positioning() -> bool {
     static_cast<void>(requests.begin_message(6, 1));
     static_cast<void>(requests.write_new_id(7));
     static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(6, 3));
+    static_cast<void>(requests.write_i32(5));
+    static_cast<void>(requests.write_i32(6));
+    static_cast<void>(requests.write_i32(400));
+    static_cast<void>(requests.write_i32(300));
+    static_cast<void>(requests.end_message());
     static_cast<void>(requests.begin_message(4, 1));
     static_cast<void>(requests.write_new_id(8));
     static_cast<void>(requests.end_message());
@@ -2929,8 +2935,8 @@ auto test_popup_positioning() -> bool {
         return false;
     }
     const auto placement = display.surface_popup_geometry(9);
-    return placement && placement->parent_surface == 5 && placement->bounds.x == 40 &&
-           placement->bounds.y == 20 && placement->bounds.width == 100 &&
+    return placement && placement->parent_surface == 5 && placement->bounds.x == 45 &&
+           placement->bounds.y == 26 && placement->bounds.width == 100 &&
            placement->bounds.height == 50;
 }
 

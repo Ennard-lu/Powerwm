@@ -50,7 +50,8 @@ auto xdg_shell_protocol::surface_popup_geometry(object_id popup_surface) const
         if (surface->id == popup->parent) {
             pwm::wayland::popup_geometry result{
                 .parent_surface = surface->surface,
-                .bounds = {popup->x, popup->y, popup->width, popup->height},
+                .bounds = {popup->x + surface->window_geometry.x,
+                           popup->y + surface->window_geometry.y, popup->width, popup->height},
             };
             return result;
         }
