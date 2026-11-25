@@ -77,6 +77,7 @@ struct xdg_popup_object {
     i32 y = 0;
     i32 width = 0;
     i32 height = 0;
+    bool grabbed = false;
 
     [[nodiscard]] auto request_destroy() -> result<void>;
     [[nodiscard]] auto request_grab(object_id seat, u32 serial) -> result<void>;
@@ -141,6 +142,8 @@ class xdg_shell_protocol {
 
     [[nodiscard]] auto surface_popup_geometry(object_id popup_surface) const
         -> std::optional<popup_geometry>;
+
+    auto dismiss_grabbed_popups(object_id hit_surface) -> void;
 
     auto discard_object(object_id id) noexcept -> void;
 

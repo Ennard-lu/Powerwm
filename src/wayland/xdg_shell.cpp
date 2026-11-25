@@ -59,6 +59,27 @@ auto xdg_shell_protocol::surface_popup_geometry(object_id popup_surface) const
     return std::nullopt;
 }
 
+auto xdg_shell_protocol::dismiss_grabbed_popups(object_id hit_surface) -> void {
+    for (const auto& popup : popups_) {
+        if (!popup->grabbed) {
+            continue;
+        }
+        bool inside = false;
+        if (hit_surface != 0) {
+            for (const auto& surface : surfaces_) {
+                if (surface->surface == hit_surface && surface->role == popup->id) {
+                    inside = true;
+                    break;
+                }
+            }
+        }
+        if (!inside) {
+            static_cast<void>(send_popup_done(popup->id));
+            popup->grabbed = false;
+        }
+    }
+}
+
 auto xdg_shell_protocol::discard_object(object_id id) noexcept -> void {
     static_cast<void>(discard_entry(wm_bases_, id));
     static_cast<void>(discard_entry(positioners_, id));
@@ -199,6 +220,7 @@ auto xdg_popup_object::request_destroy() -> result<void> {
 auto xdg_popup_object::request_grab(object_id seat, u32 serial) -> result<void> {
     static_cast<void>(seat);
     static_cast<void>(serial);
+    grabbed = true;
     return {};
 }
 

@@ -2892,17 +2892,27 @@ auto test_popup_positioning() -> bool {
     static_cast<void>(requests.write_object(6));
     static_cast<void>(requests.write_object(8));
     static_cast<void>(requests.end_message());
+    static_cast<void>(requests.begin_message(11, 1));
+    static_cast<void>(requests.write_object(0));
+    static_cast<void>(requests.write_u32(1));
+    static_cast<void>(requests.end_message());
 
     auto sent = client.send(requests.bytes(), requests.fds());
     if (!sent || !server.receive_available() || !server.dispatch_available() || !server.flush()) {
         return false;
     }
 
+    display.dismiss_grabbed_popups(9);
+    display.dismiss_grabbed_popups(0);
+    if (!server.flush()) {
+        return false;
+    }
     std::vector<std::byte> input;
     std::vector<pwm::handle_t> fds;
     if (!drain_client(client, input, fds)) {
         return false;
     }
+    bool saw_popup_done = false;
     pwm::i32 x = 0;
     pwm::i32 y = 0;
     pwm::i32 width = 0;
@@ -2928,10 +2938,16 @@ auto test_popup_positioning() -> bool {
             width = std::get<2>(event->arguments);
             height = std::get<3>(event->arguments);
             saw_popup_configure = true;
+        } else if (header->object == 11 && header->opcode == 1) {
+            if (!generated::xdg_popup::event_popup_done::decode(reader)) {
+                return false;
+            }
+            saw_popup_done = true;
         }
         offset += header->size;
     }
-    if (!saw_popup_configure || x != 40 || y != 20 || width != 100 || height != 50) {
+    if (!saw_popup_configure || !saw_popup_done || x != 40 || y != 20 || width != 100 ||
+        height != 50) {
         return false;
     }
     const auto placement = display.surface_popup_geometry(9);

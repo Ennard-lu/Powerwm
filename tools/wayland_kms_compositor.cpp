@@ -679,6 +679,18 @@ auto on_input_event(void* context, event::poll_event) -> void {
             }
         } else if (input_event->type == input::input_event_type::pointer_button &&
                    state.pointer_focus != 0) {
+            if (input_event->pressed) {
+                for (const auto& session : state.clients) {
+                    if (session->closed) {
+                        continue;
+                    }
+                    const bool owns_focus =
+                        static_cast<pwm::u32>(state.pointer_focus >> 32U) == session->index;
+                    session->display.dismiss_grabbed_popups(
+                        owns_focus ? static_cast<wayland::object_id>(state.pointer_focus) : 0);
+                    static_cast<void>(session->connection.flush());
+                }
+            }
             if (state.drag && !input_event->pressed) {
                 drop_drag(state);
             }

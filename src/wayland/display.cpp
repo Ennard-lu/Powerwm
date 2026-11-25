@@ -549,6 +549,10 @@ auto display_service::surface_popup_geometry(object_id surface) const
     return xdg_.surface_popup_geometry(surface);
 }
 
+auto display_service::dismiss_grabbed_popups(object_id hit_surface) -> void {
+    xdg_.dismiss_grabbed_popups(hit_surface);
+}
+
 auto display_service::surface_buffer_scale(object_id surface) const noexcept -> i32 {
     return core_.surface_buffer_scale(surface);
 }
