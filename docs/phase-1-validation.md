@@ -105,6 +105,7 @@ resume worked, and all 1200 frames completed.
 | DRM animation | pass, 1200 frames |
 | VT switching | pass, 10 cycles |
 | Wayland + GTK4 run | pass, 900 frames after per-output runtime refactor |
+| Dual-output GTK4 run | pass, 900 frames with HDMI + internal panel |
 | Wayland + GTK4 soak | pass, 3000 frames in 67 s, no protocol errors |
 | Resident memory | pass, 21144 KB constant across 1500 GTK4 frames |
 | Hotplug / 50 VT / 1 hour | pending |

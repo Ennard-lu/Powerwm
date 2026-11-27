@@ -157,25 +157,92 @@ auto device::find_outputs() const noexcept -> result<std::vector<output_target>>
         return std::unexpected(make_error(error_code::not_found, "no DRM plane available"));
     }
 
+    const auto crtcs = resources->crtc_ids();
+    const auto plane_ids = planes->plane_ids();
+    std::vector<bool> crtc_used(crtcs.size(), false);
+    std::vector<bool> plane_used(plane_ids.size(), false);
     std::vector<output_target> outputs;
-    usize crtc_index = 0;
-    usize plane_index = 0;
+
     for (const u32 connector_id : resources->connector_ids()) {
         auto connector = raii{get_connector(connector_id)};
         if (!connector->valid() || !connector->is_connected() || connector->mode_count() == 0) {
             continue;
         }
-        if (crtc_index >= resources->crtc_ids().size() ||
-            plane_index >= planes->plane_ids().size()) {
-            break;
+
+        usize crtc_index = crtcs.size();
+        for (const u32 encoder_id : connector->encoder_ids()) {
+            drmModeEncoder* encoder = drmModeGetEncoder(fd_handle_, encoder_id);
+            if (encoder == nullptr) {
+                continue;
+            }
+            for (usize index = 0; index < crtcs.size(); ++index) {
+                if (!crtc_used[index] && (encoder->possible_crtcs & (1U << index)) != 0) {
+                    crtc_index = index;
+                    break;
+                }
+            }
+            drmModeFreeEncoder(encoder);
+            if (crtc_index < crtcs.size()) {
+                break;
+            }
         }
+        if (crtc_index >= crtcs.size()) {
+            continue;
+        }
+
+        usize plane_index = plane_ids.size();
+        for (usize index = 0; index < plane_ids.size(); ++index) {
+            if (plane_used[index]) {
+                continue;
+            }
+            drmModePlane* plane = drmModeGetPlane(fd_handle_, plane_ids[index]);
+            if (plane == nullptr) {
+                continue;
+            }
+            const bool compatible = (plane->possible_crtcs & (1U << crtc_index)) != 0;
+            drmModeFreePlane(plane);
+            if (!compatible) {
+                continue;
+            }
+
+            bool primary = false;
+            drmModeObjectProperties* properties =
+                drmModeObjectGetProperties(fd_handle_, plane_ids[index], DRM_MODE_OBJECT_PLANE);
+            if (properties != nullptr) {
+                for (u32 property_index = 0; property_index < properties->count_props;
+                     ++property_index) {
+                    drmModePropertyRes* property =
+                        drmModeGetProperty(fd_handle_, properties->props[property_index]);
+                    if (property == nullptr) {
+                        continue;
+                    }
+                    if (std::string_view{property->name} == "type" &&
+                        properties->prop_values[property_index] == DRM_PLANE_TYPE_PRIMARY) {
+                        primary = true;
+                    }
+                    drmModeFreeProperty(property);
+                }
+                drmModeFreeObjectProperties(properties);
+            }
+            if (primary) {
+                plane_index = index;
+                break;
+            }
+        }
+        if (plane_index >= plane_ids.size()) {
+            continue;
+        }
+
+        crtc_used[crtc_index] = true;
+        plane_used[plane_index] = true;
         outputs.push_back(output_target{
-            .crtc_id = resources->crtc_ids()[crtc_index++],
+            .crtc_id = crtcs[crtc_index],
             .connector_id = connector_id,
-            .plane_id = planes->plane_ids()[plane_index++],
+            .plane_id = plane_ids[plane_index],
             .mode = connector->mode(0),
         });
     }
+
     if (outputs.empty()) {
         return std::unexpected(make_error(error_code::not_found, "no connected DRM output"));
     }

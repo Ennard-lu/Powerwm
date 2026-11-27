@@ -194,7 +194,8 @@ libwayland.
   with layout coordinates, scale, name, and description;
 - [x] per-output DRM runtime state, Vulkan DMA-BUF image rings, framebuffers, mode
   blobs, and independent page flips for every enumerated output;
-- [x] per-output scene viewport offsets, so each output renders its own desktop region;
+- [x] per-output scene viewport offsets and CRTC/primary-plane matching for real
+  dual-output presentation;
 - [x] timer-based connector re-enumeration rebuilds output runtimes, Vulkan images,
   framebuffers, and blobs, announces new wl_output globals, and sends global_remove
   with descriptor shrink for removed outputs;

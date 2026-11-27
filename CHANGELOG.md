@@ -105,6 +105,8 @@ pre-1.0 `0.x.y` convention.
   constant.
 - `xdg_popup` placement computed from positioner size, anchor rect, anchor, gravity, and
   offset, with repositioned handling and scene placement relative to the parent surface.
+- DRM output enumeration now matches connector encoders to CRTCs and primary planes,
+  enabling dual-output atomic presentation.
 - `wl_surface.enter` and `wl_surface.leave` events when a surface maps or unmaps on the
   bound `wl_output` objects.
 - `xdg_popup.grab` tracking with `popup_done` delivered when a click lands outside the
