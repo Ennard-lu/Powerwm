@@ -194,6 +194,8 @@ libwayland.
   with layout coordinates, scale, name, and description;
 - [x] per-output DRM runtime state, Vulkan DMA-BUF image rings, framebuffers, mode
   blobs, and independent page flips for every enumerated output;
+- [x] timer-based connector re-enumeration detects output count changes; runtime rebuild
+  is logged but not yet applied;
 - [x] destroyed objects are reclaimed from owner storage; idle DRM atomic requests are
   released per frame, keeping RSS flat;
 - [x] coroutine `task<T>` and a per-client session coroutine in the KMS compositor;

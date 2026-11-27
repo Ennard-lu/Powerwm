@@ -113,6 +113,8 @@ pre-1.0 `0.x.y` convention.
   including layout position, mode, scale, name, and description.
 - Per-output DRM runtime state, property blobs, Vulkan DMA-BUF image rings,
   framebuffers, and page-flip tracking, with independent presentation to every output.
+- Timer-based connector re-enumeration detects output count changes for future hotplug
+  runtime updates.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

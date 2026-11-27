@@ -119,9 +119,10 @@ struct compositor_state {
     transport::listener* listener = nullptr;
     input::context* input = nullptr;
     std::vector<std::unique_ptr<output_runtime>> output_runtimes;
+    std::vector<wayland::output_descriptor> output_descriptors;
+    pwm::u32 hotplug_check_ticks = 0;
     std::vector<std::unique_ptr<client_session>> clients;
     std::vector<pending_feedback> pending_presentations;
-    const std::vector<wayland::output_descriptor>* output_descriptors = nullptr;
     std::optional<clipboard_source> clipboard;
     std::optional<primary_source> primary;
     std::optional<drag_source> drag;
@@ -592,15 +593,11 @@ auto accept_client(compositor_state& state) -> void {
         std::println(stderr, "display start failed: {}", started.error().message);
         return;
     }
-    if (state.output_descriptors != nullptr) {
-        session->display.configure_outputs(*state.output_descriptors);
-    }
+    session->display.configure_outputs(state.output_descriptors);
     session->display.advertise_core(state.output->mode.width_px(), state.output->mode.height_px(),
                                     state.output->mode.refresh_hz());
-    if (state.output_descriptors != nullptr) {
-        for (pwm::usize index = 1; index < state.output_descriptors->size(); ++index) {
-            session->display.add_global("wl_output", 4);
-        }
+    for (pwm::usize index = 1; index < state.output_descriptors.size(); ++index) {
+        session->display.add_global("wl_output", 4);
     }
     session->display.set_surface_commit_callback(on_client_commit, session.get());
     session->display.set_presentation_feedback_callback(on_presentation_feedback, session.get());
@@ -1060,6 +1057,16 @@ auto on_timer(void* context, event::poll_event) -> void {
     if (!state.session_enabled) {
         return;
     }
+    ++state.hotplug_check_ticks;
+    if (state.hotplug_check_ticks >= 600) {
+        state.hotplug_check_ticks = 0;
+        if (auto current = state.device->find_outputs(); current) {
+            if (current->size() != state.output_runtimes.size()) {
+                std::println("hotplug detected: outputs {} -> {}", state.output_runtimes.size(),
+                             current->size());
+            }
+        }
+    }
     bool any_waiting = false;
     for (const auto& runtime : state.output_runtimes) {
         if (!runtime->waiting) {
@@ -1301,7 +1308,7 @@ int main(int argc, char** argv) {
 
     compositor_state state{};
     state.device = &device;
-    state.output_descriptors = &output_descriptors;
+    state.output_descriptors = std::move(output_descriptors);
     state.session = session;
     state.output_runtimes = std::move(output_runtimes);
     state.output = &state.output_runtimes.front()->target;
