@@ -90,6 +90,15 @@ struct drag_source {
     bool dropped = false;
 };
 
+struct output_runtime {
+    drm::output_target target;
+    output_properties ids;
+    pwm::raii<drm::property_blob> blob;
+    bool waiting = false;
+    bool allow_modeset = true;
+    pwm::u32 waiting_ticks = 0;
+};
+
 struct compositor_state {
     drm::device* device = nullptr;
     seat::session* session = nullptr;
@@ -104,6 +113,7 @@ struct compositor_state {
     event::event_loop* loop = nullptr;
     transport::listener* listener = nullptr;
     input::context* input = nullptr;
+    std::vector<std::unique_ptr<output_runtime>> output_runtimes;
     std::vector<std::unique_ptr<client_session>> clients;
     std::vector<pending_feedback> pending_presentations;
     const std::vector<wayland::output_descriptor>* output_descriptors = nullptr;
@@ -902,13 +912,13 @@ auto drm_format_for(vk::dma_buf_pixel_format format) -> pwm::u32 {
                                                         : drm::format_xrgb8888;
 }
 
-auto add_output_properties(const compositor_state& state,
+auto add_output_properties(const output_runtime& runtime,
                            const drm::dma_buf_framebuffer& framebuffer,
                            drm::atomic_request& request) -> void {
-    const auto& output = *state.output;
-    const auto& ids = *state.properties;
+    const auto& output = runtime.target;
+    const auto& ids = runtime.ids;
     add_required_property(request, output.crtc_id, ids.crtc.active, 1);
-    add_required_property(request, output.crtc_id, ids.crtc.mode_id, state.mode_blob->id());
+    add_required_property(request, output.crtc_id, ids.crtc.mode_id, runtime.blob->id());
     add_required_property(request, output.connector_id, ids.connector.crtc_id, output.crtc_id);
 
     add_required_property(request, output.plane_id, ids.plane.crtc_id, output.crtc_id);
@@ -923,43 +933,35 @@ auto add_output_properties(const compositor_state& state,
     add_required_property(request, output.plane_id, ids.plane.src_h, output.mode.height_px() << 16);
 }
 
-auto present_frame(compositor_state& state, pwm::u32 index) -> pwm::result<void> {
+auto present_frame(compositor_state& state, output_runtime& runtime, pwm::u32 index)
+    -> pwm::result<void> {
     auto request = drm::atomic_request::create();
     if (!request) {
         return std::unexpected(request.error());
     }
     auto owned_request = pwm::raii{std::move(*request)};
-    add_output_properties(state, *(*state.framebuffers)[index], owned_request.value());
+    add_output_properties(runtime, *(*state.framebuffers)[index], owned_request.value());
 
     pwm::u32 flags = drm::atomic_page_flip_event | drm::atomic_nonblock;
-    if (state.allow_modeset) {
+    if (runtime.allow_modeset) {
         flags |= drm::atomic_allow_modeset;
     }
     auto committed = state.device->commit_atomic(owned_request.value(), flags);
     if (!committed) {
         return std::unexpected(committed.error());
     }
-    state.allow_modeset = false;
-    state.waiting_for_flip = true;
-    state.waiting_ticks = 0;
+    runtime.allow_modeset = false;
+    runtime.waiting = true;
+    runtime.waiting_ticks = 0;
     return {};
 }
 
-auto render_next_frame(compositor_state& state) -> pwm::result<void> {
-    const pwm::u32 index = state.next_buffer;
+auto render_next_frame(compositor_state& state, pwm::u32 index) -> pwm::result<void> {
     const auto& output = *state.output;
-    if (auto rendered = state.renderer->render(
-            (*state.images)[index]->native_handle(), output.mode.width_px(),
-            output.mode.height_px(), state.scene->scene_graph().root(), state.scene->textures(), {},
-            {.red = 0.03F, .green = 0.04F, .blue = 0.06F, .alpha = 1.0F});
-        !rendered) {
-        return std::unexpected(rendered.error());
-    }
-    if (auto presented = present_frame(state, index); !presented) {
-        return std::unexpected(presented.error());
-    }
-    state.next_buffer = (index + 1) % buffer_count;
-    return {};
+    return state.renderer->render((*state.images)[index]->native_handle(), output.mode.width_px(),
+                                  output.mode.height_px(), state.scene->scene_graph().root(),
+                                  state.scene->textures(), {},
+                                  {.red = 0.03F, .green = 0.04F, .blue = 0.06F, .alpha = 1.0F});
 }
 
 auto flush_frame_callbacks(compositor_state& state) -> void {
@@ -996,8 +998,10 @@ auto flush_presentation_feedback(compositor_state& state) -> void {
 
 auto on_page_flip(void* context) -> void {
     auto& state = *static_cast<compositor_state*>(context);
-    state.waiting_for_flip = false;
-    state.waiting_ticks = 0;
+    for (const auto& runtime : state.output_runtimes) {
+        runtime->waiting = false;
+        runtime->waiting_ticks = 0;
+    }
     flush_frame_callbacks(state);
     flush_presentation_feedback(state);
 }
@@ -1013,12 +1017,14 @@ auto on_drm_event(void* context, event::poll_event) -> void {
 
 auto reset_after_session_change(compositor_state& state, bool enabled) -> void {
     state.session_enabled = enabled;
-    state.waiting_for_flip = false;
-    state.waiting_ticks = 0;
-    state.commit_attempts = 0;
-    if (enabled) {
-        state.allow_modeset = true;
+    for (const auto& runtime : state.output_runtimes) {
+        runtime->waiting = false;
+        runtime->waiting_ticks = 0;
+        if (enabled) {
+            runtime->allow_modeset = true;
+        }
     }
+    state.commit_attempts = 0;
 }
 
 auto on_timer(void* context, event::poll_event) -> void {
@@ -1049,12 +1055,19 @@ auto on_timer(void* context, event::poll_event) -> void {
     if (!state.session_enabled) {
         return;
     }
-    if (state.waiting_for_flip) {
-        ++state.waiting_ticks;
-        if (state.waiting_ticks > 60) {
+    bool any_waiting = false;
+    for (const auto& runtime : state.output_runtimes) {
+        if (!runtime->waiting) {
+            continue;
+        }
+        any_waiting = true;
+        ++runtime->waiting_ticks;
+        if (runtime->waiting_ticks > 60) {
             std::println(stderr, "page flip timed out");
             state.running = false;
         }
+    }
+    if (any_waiting) {
         return;
     }
     if (state.frame >= state.frame_count) {
@@ -1062,11 +1075,14 @@ auto on_timer(void* context, event::poll_event) -> void {
         return;
     }
 
-    auto rendered = render_next_frame(state);
+    const pwm::u32 index = state.next_buffer;
+    auto rendered = render_next_frame(state, index);
     if (!rendered) {
         ++state.commit_attempts;
-        state.waiting_for_flip = false;
-        state.allow_modeset = true;
+        for (const auto& runtime : state.output_runtimes) {
+            runtime->waiting = false;
+            runtime->allow_modeset = true;
+        }
         if (state.session != nullptr) {
             auto dispatched = state.session->dispatch(0);
             if (!dispatched) {
@@ -1086,6 +1102,14 @@ auto on_timer(void* context, event::poll_event) -> void {
         }
         return;
     }
+    for (const auto& runtime : state.output_runtimes) {
+        if (auto presented = present_frame(state, *runtime, index); !presented) {
+            std::println(stderr, "present error: {} (system={})", presented.error().message,
+                         presented.error().system_error);
+            runtime->allow_modeset = true;
+        }
+    }
+    state.next_buffer = (index + 1) % buffer_count;
     state.commit_attempts = 0;
     ++state.frame;
 }
@@ -1204,8 +1228,6 @@ int main(int argc, char** argv) {
 
     auto outputs = require_value(device.find_outputs());
     const drm::output_target output = outputs.front();
-    const output_properties ids = lookup_output_properties(device, output);
-    auto blob = pwm::raii{require_value(device.create_property_blob(output.mode.bytes()))};
 
     vulkan_runtime graphics{};
     create_vulkan_runtime(graphics, output.mode.width_px(), output.mode.height_px());
@@ -1252,13 +1274,22 @@ int main(int argc, char** argv) {
         output_x += static_cast<pwm::i32>(target.mode.width_px());
     }
 
+    std::vector<std::unique_ptr<output_runtime>> output_runtimes;
+    for (const auto& target : outputs) {
+        auto output_runtime_entry = std::make_unique<output_runtime>();
+        output_runtime_entry->target = target;
+        output_runtime_entry->ids = lookup_output_properties(device, target);
+        output_runtime_entry->blob =
+            pwm::raii{require_value(device.create_property_blob(target.mode.bytes()))};
+        output_runtimes.push_back(std::move(output_runtime_entry));
+    }
+
     compositor_state state{};
     state.device = &device;
     state.output_descriptors = &output_descriptors;
     state.session = session;
-    state.output = &output;
-    state.properties = &ids;
-    state.mode_blob = &blob.value();
+    state.output_runtimes = std::move(output_runtimes);
+    state.output = &state.output_runtimes.front()->target;
     state.framebuffers = &framebuffer_ptrs;
     state.renderer = &graphics.renderer.value();
     state.scene = &surface_scene;
