@@ -1827,8 +1827,8 @@ auto core_protocol::send_output_events(object_id id, u32 version) -> result<void
     std::get<0>(geometry.arguments) = descriptor.x;
     std::get<1>(geometry.arguments) = descriptor.y;
     std::get<2>(geometry.arguments) = 0;
-    std::get<3>(geometry.arguments) = static_cast<i32>(descriptor.width);
-    std::get<4>(geometry.arguments) = static_cast<i32>(descriptor.height);
+    std::get<3>(geometry.arguments) = 0;
+    std::get<4>(geometry.arguments) = 0;
     std::get<5>(geometry.arguments) = std::string_view{"powerwm"};
     std::get<6>(geometry.arguments) = std::string_view{descriptor.name};
     std::get<7>(geometry.arguments) = 0;

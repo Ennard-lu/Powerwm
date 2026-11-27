@@ -108,6 +108,8 @@ pre-1.0 `0.x.y` convention.
 - DRM output enumeration now matches connector encoders to CRTCs and primary planes,
   enabling dual-output atomic presentation.
 - Dual-output GTK4 and Qt6 validation and 50 VT switch cycles.
+- Fixed `wl_output.geometry` arguments (subpixel no longer receives a size) and validated
+  Alacritty.
 - `wl_surface.enter` and `wl_surface.leave` events when a surface maps or unmaps on the
   bound `wl_output` objects.
 - `xdg_popup.grab` tracking with `popup_done` delivered when a click lands outside the

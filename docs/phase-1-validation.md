@@ -109,7 +109,7 @@ resume worked, and all 1200 frames completed.
 | Dual-output GTK4 + Qt6 | pass, 1200 frames, both clients committed |
 | VT switching | pass, 50 cycles, 4000 frames, no fatal errors |
 | Qt6 client | pass, 500x350 shm window |
-| foot client | blocked, package not installed and sudo requires a password |
+| Alacritty client | pass, multiple surfaces committed, graceful exit |
 | Wayland + GTK4 soak | pass, 3000 frames in 67 s, no protocol errors |
 | 1-hour soak | not run per user instruction to avoid long tests |
 | Resident memory | pass, 21144 KB constant across 1500 GTK4 frames |
