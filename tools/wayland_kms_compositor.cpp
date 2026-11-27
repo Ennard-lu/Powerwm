@@ -121,6 +121,7 @@ struct compositor_state {
     transport::listener* listener = nullptr;
     input::context* input = nullptr;
     std::vector<std::unique_ptr<output_runtime>> output_runtimes;
+    vk::device* vulkan_device = nullptr;
     std::vector<wayland::output_descriptor> output_descriptors;
     pwm::u32 hotplug_check_ticks = 0;
     std::vector<std::unique_ptr<client_session>> clients;
@@ -156,6 +157,7 @@ struct client_session {
 
     wayland::connection connection;
     wayland::display_service display;
+    pwm::u32 advertised_outputs = 0;
     pwm::task<void> loop;
     bool closed = false;
 };
@@ -601,6 +603,7 @@ auto accept_client(compositor_state& state) -> void {
     for (pwm::usize index = 1; index < state.output_descriptors.size(); ++index) {
         session->display.add_global("wl_output", 4);
     }
+    session->advertised_outputs = static_cast<pwm::u32>(state.output_descriptors.size());
     session->display.set_surface_commit_callback(on_client_commit, session.get());
     session->display.set_presentation_feedback_callback(on_presentation_feedback, session.get());
     session->display.set_defer_frame_callbacks(true);
@@ -968,6 +971,70 @@ auto render_next_frame(compositor_state& state, output_runtime& runtime, pwm::u3
                                   {.red = 0.03F, .green = 0.04F, .blue = 0.06F, .alpha = 1.0F});
 }
 
+auto build_output_descriptors(const std::vector<drm::output_target>& targets)
+    -> std::vector<wayland::output_descriptor> {
+    std::vector<wayland::output_descriptor> descriptors;
+    pwm::i32 x = 0;
+    for (pwm::usize index = 0; index < targets.size(); ++index) {
+        const auto& target = targets[index];
+        descriptors.push_back(wayland::output_descriptor{
+            .x = x,
+            .y = 0,
+            .width = target.mode.width_px(),
+            .height = target.mode.height_px(),
+            .refresh_hz = target.mode.refresh_hz(),
+            .scale = 1,
+            .name = "powerwm-" + std::to_string(index),
+            .description = "powerwm DRM output",
+        });
+        x += static_cast<pwm::i32>(target.mode.width_px());
+    }
+    return descriptors;
+}
+
+auto rebuild_output_runtimes(compositor_state& state,
+                             const std::vector<drm::output_target>& targets) -> bool {
+    if (state.vulkan_device == nullptr) {
+        return false;
+    }
+    std::vector<std::unique_ptr<output_runtime>> runtimes;
+    pwm::i32 viewport_x = 0;
+    for (const auto& target : targets) {
+        auto runtime = std::make_unique<output_runtime>();
+        runtime->target = target;
+        runtime->viewport_x = viewport_x;
+        viewport_x += static_cast<pwm::i32>(target.mode.width_px());
+        runtime->ids = lookup_output_properties(*state.device, target);
+        auto blob = state.device->create_property_blob(target.mode.bytes());
+        if (!blob) {
+            return false;
+        }
+        runtime->blob = pwm::raii{std::move(*blob)};
+        for (pwm::u32 index = 0; index < buffer_count; ++index) {
+            auto image = vk::create_dma_buf_image(*state.vulkan_device, target.mode.width_px(),
+                                                  target.mode.height_px());
+            if (!image) {
+                return false;
+            }
+            runtime->images[index] = pwm::raii{std::move(*image)};
+            const auto& created = runtime->images[index].value();
+            auto framebuffer = state.device->create_framebuffer_from_dma_buf(
+                created.fd(), created.width_px(), created.height_px(), created.pitch_bytes(),
+                drm_format_for(created.pixel_format()), created.modifier());
+            if (!framebuffer) {
+                return false;
+            }
+            runtime->framebuffers[index] = pwm::raii{std::move(*framebuffer)};
+            runtime->framebuffer_ptrs[index] = &runtime->framebuffers[index].value();
+            runtime->image_ptrs[index] = &created;
+        }
+        runtimes.push_back(std::move(runtime));
+    }
+    state.output_runtimes = std::move(runtimes);
+    state.output = &state.output_runtimes.front()->target;
+    return true;
+}
+
 auto flush_frame_callbacks(compositor_state& state) -> void {
     for (const auto& session : state.clients) {
         if (session->closed) {
@@ -1064,8 +1131,27 @@ auto on_timer(void* context, event::poll_event) -> void {
         state.hotplug_check_ticks = 0;
         if (auto current = state.device->find_outputs(); current) {
             if (current->size() != state.output_runtimes.size()) {
-                std::println("hotplug detected: outputs {} -> {}", state.output_runtimes.size(),
-                             current->size());
+                const pwm::u32 previous = static_cast<pwm::u32>(state.output_runtimes.size());
+                if (rebuild_output_runtimes(state, *current)) {
+                    auto descriptors = build_output_descriptors(*current);
+                    state.output_descriptors = descriptors;
+                    for (const auto& session : state.clients) {
+                        if (session->closed) {
+                            continue;
+                        }
+                        session->display.configure_outputs(state.output_descriptors);
+                        while (session->advertised_outputs < descriptors.size()) {
+                            const pwm::u32 name = session->display.add_global("wl_output", 4);
+                            static_cast<void>(session->display.announce_global(name));
+                            ++session->advertised_outputs;
+                        }
+                        static_cast<void>(session->connection.flush());
+                    }
+                    std::println("hotplug applied: outputs {} -> {}", previous,
+                                 state.output_runtimes.size());
+                } else {
+                    std::println(stderr, "hotplug rebuild failed");
+                }
             }
         }
     }
@@ -1313,6 +1399,7 @@ int main(int argc, char** argv) {
 
     compositor_state state{};
     state.device = &device;
+    state.vulkan_device = &graphics.device.value();
     state.output_descriptors = std::move(output_descriptors);
     state.session = session;
     state.output_runtimes = std::move(output_runtimes);

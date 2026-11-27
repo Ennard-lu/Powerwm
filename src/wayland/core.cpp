@@ -1031,7 +1031,6 @@ auto core_protocol::configure_output(u32 width, u32 height, u32 refresh_hz) noex
 
 auto core_protocol::configure_outputs(std::span<const output_descriptor> outputs) noexcept -> void {
     output_descriptors_.assign(outputs.begin(), outputs.end());
-    next_output_index_ = 0;
 }
 
 auto core_protocol::output_descriptor_for(object_id id) const -> std::optional<output_descriptor> {

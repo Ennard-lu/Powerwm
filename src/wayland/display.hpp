@@ -137,6 +137,8 @@ class display_service {
 
     [[nodiscard]] auto add_global(std::string_view interface, u32 version) -> u32;
 
+    [[nodiscard]] auto announce_global(u32 name) -> result<void>;
+
     auto advertise_core(u32 output_width, u32 output_height, u32 refresh_hz) -> void;
 
     auto configure_output(u32 width, u32 height, u32 refresh_hz) -> void;

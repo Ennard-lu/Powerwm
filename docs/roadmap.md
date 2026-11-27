@@ -195,8 +195,8 @@ libwayland.
 - [x] per-output DRM runtime state, Vulkan DMA-BUF image rings, framebuffers, mode
   blobs, and independent page flips for every enumerated output;
 - [x] per-output scene viewport offsets, so each output renders its own desktop region;
-- [x] timer-based connector re-enumeration detects output count changes; runtime rebuild
-  is logged but not yet applied;
+- [x] timer-based connector re-enumeration rebuilds output runtimes, Vulkan images,
+  framebuffers, and blobs, and announces new wl_output globals to existing clients;
 - [x] destroyed objects are reclaimed from owner storage; idle DRM atomic requests are
   released per frame, keeping RSS flat;
 - [x] coroutine `task<T>` and a per-client session coroutine in the KMS compositor;

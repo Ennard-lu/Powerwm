@@ -29,6 +29,31 @@ auto display_service::add_global(std::string_view interface, u32 version) -> u32
     return name;
 }
 
+auto display_service::announce_global(u32 name) -> result<void> {
+    for (const auto& global : globals_) {
+        if (global.name != name) {
+            continue;
+        }
+        for (const auto& registry : registries_) {
+            generated::wl_registry::event_global event{};
+            std::get<0>(event.arguments) = global.name;
+            std::get<1>(event.arguments) = global.interface;
+            std::get<2>(event.arguments) = global.version;
+            protocol_writer writer;
+            if (auto encoded =
+                    generated::wl_registry::event_global::encode(writer, registry->id, event);
+                !encoded) {
+                return std::unexpected(encoded.error());
+            }
+            if (auto queued = queue_event(writer); !queued) {
+                return std::unexpected(queued.error());
+            }
+        }
+        return {};
+    }
+    return std::unexpected(make_error(error_code::not_found, "global is unknown"));
+}
+
 auto display_service::advertise_core(u32 output_width, u32 output_height, u32 refresh_hz) -> void {
     core_.configure_output(output_width, output_height, refresh_hz);
     add_global("wl_compositor", 4);
