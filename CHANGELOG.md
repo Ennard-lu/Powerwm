@@ -109,6 +109,8 @@ pre-1.0 `0.x.y` convention.
   bound `wl_output` objects.
 - `xdg_popup.grab` tracking with `popup_done` delivered when a click lands outside the
   grabbed popup.
+- DRM output enumeration with per-output `wl_output` and `zxdg_output_v1` descriptors,
+  including layout position, mode, scale, name, and description.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

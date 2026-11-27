@@ -17,6 +17,7 @@
 #include <span>
 #include <string_view>
 #include <sys/mman.h>
+#include <vector>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
@@ -425,6 +426,8 @@ class device {
     [[nodiscard]] auto get_connector(u32 connector_id) const noexcept -> connector;
 
     [[nodiscard]] auto find_primary_output() const noexcept -> result<output_target>;
+
+    [[nodiscard]] auto find_outputs() const noexcept -> result<std::vector<output_target>>;
 
     [[nodiscard]] auto wait_for_page_flip(i32 timeout_ms) const noexcept -> result<void>;
 

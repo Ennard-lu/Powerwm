@@ -141,6 +141,11 @@ class display_service {
 
     auto configure_output(u32 width, u32 height, u32 refresh_hz) -> void;
 
+    auto configure_outputs(std::span<const output_descriptor> outputs) -> void;
+
+    [[nodiscard]] auto output_descriptor_for(object_id id) const
+        -> std::optional<output_descriptor>;
+
     [[nodiscard]] auto globals() const noexcept -> const std::vector<registry_global>&;
 
     [[nodiscard]] auto next_serial() noexcept -> u32;

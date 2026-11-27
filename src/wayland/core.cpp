@@ -479,7 +479,8 @@ auto xdg_output_object::request_destroy() -> result<void> {
 
 auto xdg_output_manager_object::request_get_xdg_output(object_id xdg_output, object_id output)
     -> result<void> {
-    static_cast<void>(output);
+    const output_descriptor descriptor =
+        core->output_descriptor_for(output).value_or(output_descriptor{});
     auto* object = core->store(core->xdg_outputs_, xdg_output_object{core, xdg_output, version});
     if (auto added = add_object<xdg_output_object, generated::zxdg_output_v1>(
             core->service().connection_ref().objects(), xdg_output, *object);
@@ -488,8 +489,8 @@ auto xdg_output_manager_object::request_get_xdg_output(object_id xdg_output, obj
     }
 
     generated::zxdg_output_v1::event_logical_position position{};
-    std::get<0>(position.arguments) = 0;
-    std::get<1>(position.arguments) = 0;
+    std::get<0>(position.arguments) = descriptor.x;
+    std::get<1>(position.arguments) = descriptor.y;
     protocol_writer position_writer;
     if (auto encoded = generated::zxdg_output_v1::event_logical_position::encode(
             position_writer, xdg_output, position);
@@ -501,8 +502,8 @@ auto xdg_output_manager_object::request_get_xdg_output(object_id xdg_output, obj
     }
 
     generated::zxdg_output_v1::event_logical_size size{};
-    std::get<0>(size.arguments) = static_cast<i32>(core->output_width_);
-    std::get<1>(size.arguments) = static_cast<i32>(core->output_height_);
+    std::get<0>(size.arguments) = static_cast<i32>(descriptor.width);
+    std::get<1>(size.arguments) = static_cast<i32>(descriptor.height);
     protocol_writer size_writer;
     if (auto encoded =
             generated::zxdg_output_v1::event_logical_size::encode(size_writer, xdg_output, size);
@@ -515,7 +516,7 @@ auto xdg_output_manager_object::request_get_xdg_output(object_id xdg_output, obj
 
     if (version >= 2) {
         generated::zxdg_output_v1::event_name name{};
-        std::get<0>(name.arguments) = "powerwm-0";
+        std::get<0>(name.arguments) = descriptor.name;
         protocol_writer name_writer;
         if (auto encoded =
                 generated::zxdg_output_v1::event_name::encode(name_writer, xdg_output, name);
@@ -526,7 +527,7 @@ auto xdg_output_manager_object::request_get_xdg_output(object_id xdg_output, obj
             return std::unexpected(queued.error());
         }
         generated::zxdg_output_v1::event_description description{};
-        std::get<0>(description.arguments) = "powerwm virtual output";
+        std::get<0>(description.arguments) = descriptor.description;
         protocol_writer description_writer;
         if (auto encoded = generated::zxdg_output_v1::event_description::encode(
                 description_writer, xdg_output, description);
@@ -1028,8 +1029,30 @@ auto core_protocol::configure_output(u32 width, u32 height, u32 refresh_hz) noex
     output_refresh_hz_ = refresh_hz;
 }
 
+auto core_protocol::configure_outputs(std::span<const output_descriptor> outputs) noexcept -> void {
+    output_descriptors_.assign(outputs.begin(), outputs.end());
+    next_output_index_ = 0;
+}
+
+auto core_protocol::output_descriptor_for(object_id id) const -> std::optional<output_descriptor> {
+    for (const auto& output : outputs_) {
+        if (output->id != id) {
+            continue;
+        }
+        if (output->descriptor_index < output_descriptors_.size()) {
+            return output_descriptors_[output->descriptor_index];
+        }
+        output_descriptor fallback;
+        fallback.width = output_width_;
+        fallback.height = output_height_;
+        fallback.refresh_hz = output_refresh_hz_;
+        return fallback;
+    }
+    return std::nullopt;
+}
+
 auto core_protocol::create_output(object_id id, u32 version) -> result<void> {
-    auto* object = store(outputs_, output_object{this, id, version});
+    auto* object = store(outputs_, output_object{this, id, version, next_output_index_++});
     if (auto added = add_object<output_object, generated::wl_output>(
             service_->connection_ref().objects(), id, *object);
         !added) {
@@ -1800,14 +1823,15 @@ auto core_protocol::notify_commit(const surface_commit_event& event) noexcept ->
 }
 
 auto core_protocol::send_output_events(object_id id, u32 version) -> result<void> {
+    const output_descriptor descriptor = output_descriptor_for(id).value_or(output_descriptor{});
     generated::wl_output::event_geometry geometry{};
-    std::get<0>(geometry.arguments) = 0;
-    std::get<1>(geometry.arguments) = 0;
+    std::get<0>(geometry.arguments) = descriptor.x;
+    std::get<1>(geometry.arguments) = descriptor.y;
     std::get<2>(geometry.arguments) = 0;
-    std::get<3>(geometry.arguments) = 0;
-    std::get<4>(geometry.arguments) = 0;
-    std::get<5>(geometry.arguments) = "powerwm";
-    std::get<6>(geometry.arguments) = "virtual";
+    std::get<3>(geometry.arguments) = static_cast<i32>(descriptor.width);
+    std::get<4>(geometry.arguments) = static_cast<i32>(descriptor.height);
+    std::get<5>(geometry.arguments) = std::string_view{"powerwm"};
+    std::get<6>(geometry.arguments) = std::string_view{descriptor.name};
     std::get<7>(geometry.arguments) = 0;
     protocol_writer geometry_writer;
     if (auto encoded = generated::wl_output::event_geometry::encode(geometry_writer, id, geometry);
@@ -1820,9 +1844,9 @@ auto core_protocol::send_output_events(object_id id, u32 version) -> result<void
 
     generated::wl_output::event_mode mode{};
     std::get<0>(mode.arguments) = 3;
-    std::get<1>(mode.arguments) = static_cast<i32>(output_width_);
-    std::get<2>(mode.arguments) = static_cast<i32>(output_height_);
-    std::get<3>(mode.arguments) = static_cast<i32>(output_refresh_hz_ * 1000U);
+    std::get<1>(mode.arguments) = static_cast<i32>(descriptor.width);
+    std::get<2>(mode.arguments) = static_cast<i32>(descriptor.height);
+    std::get<3>(mode.arguments) = static_cast<i32>(descriptor.refresh_hz * 1000U);
     protocol_writer mode_writer;
     if (auto encoded = generated::wl_output::event_mode::encode(mode_writer, id, mode); !encoded) {
         return std::unexpected(encoded.error());
@@ -1835,7 +1859,7 @@ auto core_protocol::send_output_events(object_id id, u32 version) -> result<void
         return {};
     }
     generated::wl_output::event_scale scale{};
-    std::get<0>(scale.arguments) = 1;
+    std::get<0>(scale.arguments) = static_cast<i32>(descriptor.scale);
     protocol_writer scale_writer;
     if (auto encoded = generated::wl_output::event_scale::encode(scale_writer, id, scale);
         !encoded) {
@@ -1847,7 +1871,7 @@ auto core_protocol::send_output_events(object_id id, u32 version) -> result<void
 
     if (version >= 4) {
         generated::wl_output::event_name name{};
-        std::get<0>(name.arguments) = "powerwm-0";
+        std::get<0>(name.arguments) = descriptor.name;
         protocol_writer name_writer;
         if (auto encoded = generated::wl_output::event_name::encode(name_writer, id, name);
             !encoded) {
@@ -1857,7 +1881,7 @@ auto core_protocol::send_output_events(object_id id, u32 version) -> result<void
             return std::unexpected(queued.error());
         }
         generated::wl_output::event_description description{};
-        std::get<0>(description.arguments) = "powerwm virtual output";
+        std::get<0>(description.arguments) = descriptor.description;
         protocol_writer description_writer;
         if (auto encoded = generated::wl_output::event_description::encode(description_writer, id,
                                                                            description);

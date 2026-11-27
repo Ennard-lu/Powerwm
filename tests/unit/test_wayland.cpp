@@ -2956,6 +2956,123 @@ auto test_popup_positioning() -> bool {
            placement->bounds.height == 50;
 }
 
+auto test_output_descriptors() -> bool {
+    const auto path =
+        (std::filesystem::temp_directory_path() / "powerwm-wayland-outputs.sock").string();
+    auto listener_result = transport::listener::create(path);
+    if (!listener_result) {
+        return false;
+    }
+    auto listener = std::move(*listener_result);
+    auto client_result = transport::connect_stream(path);
+    if (!client_result) {
+        return false;
+    }
+    auto client = std::move(*client_result);
+    auto server_result = listener.accept();
+    if (!server_result) {
+        return false;
+    }
+    wayland::connection server{std::move(*server_result)};
+    wayland::display_service display{server};
+    if (!display.start()) {
+        return false;
+    }
+    const std::array<wayland::output_descriptor, 2> outputs{{
+        {.x = 0,
+         .y = 0,
+         .width = 800,
+         .height = 600,
+         .refresh_hz = 60,
+         .scale = 1,
+         .name = "left",
+         .description = "Left output"},
+        {.x = 800,
+         .y = 0,
+         .width = 1024,
+         .height = 768,
+         .refresh_hz = 75,
+         .scale = 2,
+         .name = "right",
+         .description = "Right output"},
+    }};
+    display.configure_outputs(outputs);
+    const u32 first_global = display.add_global("wl_output", 4);
+    const u32 second_global = display.add_global("wl_output", 4);
+
+    wayland::protocol_writer requests;
+    static_cast<void>(requests.begin_message(1, 1));
+    static_cast<void>(requests.write_new_id(2));
+    static_cast<void>(requests.end_message());
+    const auto bind_output = [&requests](u32 global, u32 id) {
+        static_cast<void>(requests.begin_message(2, 0));
+        static_cast<void>(requests.write_u32(global));
+        static_cast<void>(requests.write_string("wl_output"));
+        static_cast<void>(requests.write_u32(4));
+        static_cast<void>(requests.write_new_id(id));
+        static_cast<void>(requests.end_message());
+    };
+    bind_output(first_global, 3);
+    bind_output(second_global, 4);
+    auto sent = client.send(requests.bytes(), requests.fds());
+    if (!sent || !server.receive_available() || !server.dispatch_available() || !server.flush()) {
+        return false;
+    }
+    std::vector<std::byte> input;
+    std::vector<pwm::handle_t> fds;
+    if (!drain_client(client, input, fds)) {
+        return false;
+    }
+
+    std::array<bool, 2> saw_geometry{};
+    std::array<bool, 2> saw_mode{};
+    pwm::i32 first_x = 0;
+    pwm::i32 second_x = 0;
+    pwm::i32 second_scale = 0;
+    pwm::usize offset = 0;
+    while (offset + sizeof(wayland::message_header) <= input.size()) {
+        auto header = wayland::decode_header(std::span<const std::byte>{input}.subspan(offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{input}.subspan(
+            offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if ((header->object == 3 || header->object == 4) && header->opcode == 0) {
+            auto event = generated::wl_output::event_geometry::decode(reader);
+            if (!event) {
+                return false;
+            }
+            const pwm::usize index = header->object == 3 ? 0 : 1;
+            saw_geometry[index] = true;
+            if (index == 0) {
+                first_x = std::get<0>(event->arguments);
+            } else {
+                second_x = std::get<0>(event->arguments);
+            }
+        } else if ((header->object == 3 || header->object == 4) && header->opcode == 1) {
+            if (!generated::wl_output::event_mode::decode(reader)) {
+                return false;
+            }
+            saw_mode[header->object == 3 ? 0 : 1] = true;
+        } else if (header->object == 4 && header->opcode == 3) {
+            auto event = generated::wl_output::event_scale::decode(reader);
+            if (!event) {
+                return false;
+            }
+            second_scale = std::get<0>(event->arguments);
+        }
+        offset += header->size;
+    }
+
+    const auto left = display.output_descriptor_for(3);
+    const auto right = display.output_descriptor_for(4);
+    return saw_geometry[0] && saw_geometry[1] && saw_mode[0] && saw_mode[1] && first_x == 0 &&
+           second_x == 800 && second_scale == 2 && left && right && left->name == "left" &&
+           right->width == 1024;
+}
+
 auto test_generated_descriptors() -> bool {
     if (generated::wl_display::name != "wl_display" || generated::wl_display::request_count != 2 ||
         generated::wl_display::event_count != 2) {
@@ -3006,6 +3123,10 @@ int main() {
     }
     if (!test_core_objects()) {
         std::println(stderr, "core object test failed");
+        return EXIT_FAILURE;
+    }
+    if (!test_output_descriptors()) {
+        std::println(stderr, "output descriptor test failed");
         return EXIT_FAILURE;
     }
     if (!test_popup_positioning()) {

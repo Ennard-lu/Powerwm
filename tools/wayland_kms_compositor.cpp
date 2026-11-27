@@ -106,6 +106,7 @@ struct compositor_state {
     input::context* input = nullptr;
     std::vector<std::unique_ptr<client_session>> clients;
     std::vector<pending_feedback> pending_presentations;
+    const std::vector<wayland::output_descriptor>* output_descriptors = nullptr;
     std::optional<clipboard_source> clipboard;
     std::optional<primary_source> primary;
     std::optional<drag_source> drag;
@@ -576,8 +577,16 @@ auto accept_client(compositor_state& state) -> void {
         std::println(stderr, "display start failed: {}", started.error().message);
         return;
     }
+    if (state.output_descriptors != nullptr) {
+        session->display.configure_outputs(*state.output_descriptors);
+    }
     session->display.advertise_core(state.output->mode.width_px(), state.output->mode.height_px(),
                                     state.output->mode.refresh_hz());
+    if (state.output_descriptors != nullptr) {
+        for (pwm::usize index = 1; index < state.output_descriptors->size(); ++index) {
+            session->display.add_global("wl_output", 4);
+        }
+    }
     session->display.set_surface_commit_callback(on_client_commit, session.get());
     session->display.set_presentation_feedback_callback(on_presentation_feedback, session.get());
     session->display.set_defer_frame_callbacks(true);
@@ -1193,7 +1202,8 @@ int main(int argc, char** argv) {
     }
     enable_atomic_features(device, session == nullptr);
 
-    const drm::output_target output = require_value(device.find_primary_output());
+    auto outputs = require_value(device.find_outputs());
+    const drm::output_target output = outputs.front();
     const output_properties ids = lookup_output_properties(device, output);
     auto blob = pwm::raii{require_value(device.create_property_blob(output.mode.bytes()))};
 
@@ -1225,8 +1235,26 @@ int main(int argc, char** argv) {
     auto listener = pwm::raii{require_value(transport::listener::create(socket_path))};
     auto timer = pwm::raii{require_value(event::timer_fd::create())};
 
+    std::vector<wayland::output_descriptor> output_descriptors;
+    pwm::i32 output_x = 0;
+    for (pwm::usize index = 0; index < outputs.size(); ++index) {
+        const auto& target = outputs[index];
+        output_descriptors.push_back(wayland::output_descriptor{
+            .x = output_x,
+            .y = 0,
+            .width = target.mode.width_px(),
+            .height = target.mode.height_px(),
+            .refresh_hz = target.mode.refresh_hz(),
+            .scale = 1,
+            .name = "powerwm-" + std::to_string(index),
+            .description = "powerwm DRM output",
+        });
+        output_x += static_cast<pwm::i32>(target.mode.width_px());
+    }
+
     compositor_state state{};
     state.device = &device;
+    state.output_descriptors = &output_descriptors;
     state.session = session;
     state.output = &output;
     state.properties = &ids;

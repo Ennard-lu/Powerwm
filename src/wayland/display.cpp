@@ -53,6 +53,15 @@ auto display_service::configure_output(u32 width, u32 height, u32 refresh_hz) ->
     core_.configure_output(width, height, refresh_hz);
 }
 
+auto display_service::configure_outputs(std::span<const output_descriptor> outputs) -> void {
+    core_.configure_outputs(outputs);
+}
+
+auto display_service::output_descriptor_for(object_id id) const
+    -> std::optional<output_descriptor> {
+    return core_.output_descriptor_for(id);
+}
+
 auto display_service::globals() const noexcept -> const std::vector<registry_global>& {
     return globals_;
 }

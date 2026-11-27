@@ -334,10 +334,22 @@ struct layer_shell_object {
     [[nodiscard]] auto request_destroy() -> result<void>;
 };
 
+struct output_descriptor {
+    i32 x = 0;
+    i32 y = 0;
+    u32 width = 1280;
+    u32 height = 720;
+    u32 refresh_hz = 60;
+    u32 scale = 1;
+    std::string name = "powerwm-0";
+    std::string description = "powerwm virtual output";
+};
+
 struct output_object {
     core_protocol* core = nullptr;
     object_id id = 0;
     u32 version = 1;
+    u32 descriptor_index = 0;
 
     [[nodiscard]] auto request_release() -> result<void>;
 };
@@ -518,6 +530,11 @@ class core_protocol {
 
     auto configure_output(u32 width, u32 height, u32 refresh_hz) noexcept -> void;
 
+    auto configure_outputs(std::span<const output_descriptor> outputs) noexcept -> void;
+
+    [[nodiscard]] auto output_descriptor_for(object_id id) const
+        -> std::optional<output_descriptor>;
+
     [[nodiscard]] auto create_output(object_id id, u32 version) -> result<void>;
     [[nodiscard]] auto create_seat(object_id id, u32 version) -> result<void>;
 
@@ -643,6 +660,8 @@ class core_protocol {
     u32 output_width_ = 1280;
     u32 output_height_ = 720;
     u32 output_refresh_hz_ = 60;
+    std::vector<output_descriptor> output_descriptors_;
+    u32 next_output_index_ = 0;
     surface_commit_callback commit_callback_ = nullptr;
     void* commit_context_ = nullptr;
     object_id next_server_id_ = 0xff000000;

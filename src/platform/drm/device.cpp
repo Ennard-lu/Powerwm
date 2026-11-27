@@ -147,6 +147,41 @@ auto device::find_primary_output() const noexcept -> result<output_target> {
     return std::unexpected(make_error(error_code::not_found, "no connected DRM output"));
 }
 
+auto device::find_outputs() const noexcept -> result<std::vector<output_target>> {
+    auto resources = raii{get_resources()};
+    if (!resources->valid() || resources->crtc_ids().empty()) {
+        return std::unexpected(make_error(error_code::not_found, "no DRM CRTC available"));
+    }
+    auto planes = raii{get_plane_resources()};
+    if (!planes->valid() || planes->plane_ids().empty()) {
+        return std::unexpected(make_error(error_code::not_found, "no DRM plane available"));
+    }
+
+    std::vector<output_target> outputs;
+    usize crtc_index = 0;
+    usize plane_index = 0;
+    for (const u32 connector_id : resources->connector_ids()) {
+        auto connector = raii{get_connector(connector_id)};
+        if (!connector->valid() || !connector->is_connected() || connector->mode_count() == 0) {
+            continue;
+        }
+        if (crtc_index >= resources->crtc_ids().size() ||
+            plane_index >= planes->plane_ids().size()) {
+            break;
+        }
+        outputs.push_back(output_target{
+            .crtc_id = resources->crtc_ids()[crtc_index++],
+            .connector_id = connector_id,
+            .plane_id = planes->plane_ids()[plane_index++],
+            .mode = connector->mode(0),
+        });
+    }
+    if (outputs.empty()) {
+        return std::unexpected(make_error(error_code::not_found, "no connected DRM output"));
+    }
+    return outputs;
+}
+
 auto device::create_dumb_buffer(const buffer_format& format) const noexcept -> result<dumb_buffer> {
     drm_mode_create_dumb create_info{
         .height = format.height_px,
