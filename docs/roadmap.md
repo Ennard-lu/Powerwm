@@ -192,8 +192,8 @@ libwayland.
 - [x] xdg_popup grabs with popup_done when a grab is clicked outside;
 - [x] DRM output enumeration and per-output `wl_output`/`zxdg_output_v1` descriptors
   with layout coordinates, scale, name, and description;
-- [x] per-output DRM runtime state (properties, mode blob, page-flip tracking) with
-  independent atomic presentation to every enumerated output;
+- [x] per-output DRM runtime state, Vulkan DMA-BUF image rings, framebuffers, mode
+  blobs, and independent page flips for every enumerated output;
 - [x] destroyed objects are reclaimed from owner storage; idle DRM atomic requests are
   released per frame, keeping RSS flat;
 - [x] coroutine `task<T>` and a per-client session coroutine in the KMS compositor;

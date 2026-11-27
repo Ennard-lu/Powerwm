@@ -111,8 +111,8 @@ pre-1.0 `0.x.y` convention.
   grabbed popup.
 - DRM output enumeration with per-output `wl_output` and `zxdg_output_v1` descriptors,
   including layout position, mode, scale, name, and description.
-- Per-output DRM runtime state, property blobs, and page-flip tracking, with atomic
-  presentation to every enumerated output.
+- Per-output DRM runtime state, property blobs, Vulkan DMA-BUF image rings,
+  framebuffers, and page-flip tracking, with independent presentation to every output.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

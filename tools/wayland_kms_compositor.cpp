@@ -94,6 +94,11 @@ struct output_runtime {
     drm::output_target target;
     output_properties ids;
     pwm::raii<drm::property_blob> blob;
+    std::array<pwm::raii<vk::dma_buf_image>, buffer_count> images;
+    std::array<pwm::raii<drm::dma_buf_framebuffer>, buffer_count> framebuffers;
+    std::array<const drm::dma_buf_framebuffer*, buffer_count> framebuffer_ptrs{};
+    std::array<const vk::dma_buf_image*, buffer_count> image_ptrs{};
+    pwm::u32 next_buffer = 0;
     bool waiting = false;
     bool allow_modeset = true;
     pwm::u32 waiting_ticks = 0;
@@ -940,7 +945,7 @@ auto present_frame(compositor_state& state, output_runtime& runtime, pwm::u32 in
         return std::unexpected(request.error());
     }
     auto owned_request = pwm::raii{std::move(*request)};
-    add_output_properties(runtime, *(*state.framebuffers)[index], owned_request.value());
+    add_output_properties(runtime, *runtime.framebuffer_ptrs[index], owned_request.value());
 
     pwm::u32 flags = drm::atomic_page_flip_event | drm::atomic_nonblock;
     if (runtime.allow_modeset) {
@@ -956,11 +961,11 @@ auto present_frame(compositor_state& state, output_runtime& runtime, pwm::u32 in
     return {};
 }
 
-auto render_next_frame(compositor_state& state, pwm::u32 index) -> pwm::result<void> {
-    const auto& output = *state.output;
-    return state.renderer->render((*state.images)[index]->native_handle(), output.mode.width_px(),
-                                  output.mode.height_px(), state.scene->scene_graph().root(),
-                                  state.scene->textures(), {},
+auto render_next_frame(compositor_state& state, output_runtime& runtime, pwm::u32 index)
+    -> pwm::result<void> {
+    return state.renderer->render(runtime.image_ptrs[index]->native_handle(),
+                                  runtime.target.mode.width_px(), runtime.target.mode.height_px(),
+                                  state.scene->scene_graph().root(), state.scene->textures(), {},
                                   {.red = 0.03F, .green = 0.04F, .blue = 0.06F, .alpha = 1.0F});
 }
 
@@ -1075,8 +1080,23 @@ auto on_timer(void* context, event::poll_event) -> void {
         return;
     }
 
-    const pwm::u32 index = state.next_buffer;
-    auto rendered = render_next_frame(state, index);
+    bool rendered_any = false;
+    pwm::result<void> rendered{};
+    for (const auto& runtime : state.output_runtimes) {
+        const pwm::u32 index = runtime->next_buffer;
+        rendered = render_next_frame(state, *runtime, index);
+        if (!rendered) {
+            break;
+        }
+        if (auto presented = present_frame(state, *runtime, index); !presented) {
+            std::println(stderr, "present error: {} (system={})", presented.error().message,
+                         presented.error().system_error);
+            runtime->allow_modeset = true;
+            continue;
+        }
+        runtime->next_buffer = (index + 1) % buffer_count;
+        rendered_any = true;
+    }
     if (!rendered) {
         ++state.commit_attempts;
         for (const auto& runtime : state.output_runtimes) {
@@ -1102,14 +1122,9 @@ auto on_timer(void* context, event::poll_event) -> void {
         }
         return;
     }
-    for (const auto& runtime : state.output_runtimes) {
-        if (auto presented = present_frame(state, *runtime, index); !presented) {
-            std::println(stderr, "present error: {} (system={})", presented.error().message,
-                         presented.error().system_error);
-            runtime->allow_modeset = true;
-        }
+    if (!rendered_any) {
+        return;
     }
-    state.next_buffer = (index + 1) % buffer_count;
     state.commit_attempts = 0;
     ++state.frame;
 }
@@ -1232,18 +1247,6 @@ int main(int argc, char** argv) {
     vulkan_runtime graphics{};
     create_vulkan_runtime(graphics, output.mode.width_px(), output.mode.height_px());
 
-    std::array<pwm::raii<drm::dma_buf_framebuffer>, buffer_count> framebuffers;
-    std::array<const drm::dma_buf_framebuffer*, buffer_count> framebuffer_ptrs{};
-    std::array<const vk::dma_buf_image*, buffer_count> image_ptrs{};
-    for (pwm::u32 index = 0; index < buffer_count; ++index) {
-        const auto& image = graphics.images[index].value();
-        framebuffers[index] = pwm::raii{require_value(device.create_framebuffer_from_dma_buf(
-            image.fd(), image.width_px(), image.height_px(), image.pitch_bytes(),
-            drm_format_for(image.pixel_format()), image.modifier()))};
-        framebuffer_ptrs[index] = &framebuffers[index].value();
-        image_ptrs[index] = &image;
-    }
-
     auto input_result = input::context::create("seat0");
     pwm::raii<input::context> input_context;
     if (input_result) {
@@ -1281,6 +1284,18 @@ int main(int argc, char** argv) {
         output_runtime_entry->ids = lookup_output_properties(device, target);
         output_runtime_entry->blob =
             pwm::raii{require_value(device.create_property_blob(target.mode.bytes()))};
+        for (pwm::u32 index = 0; index < buffer_count; ++index) {
+            output_runtime_entry->images[index] = pwm::raii{require_value(vk::create_dma_buf_image(
+                graphics.device.value(), target.mode.width_px(), target.mode.height_px()))};
+            const auto& image = output_runtime_entry->images[index].value();
+            output_runtime_entry->framebuffers[index] =
+                pwm::raii{require_value(device.create_framebuffer_from_dma_buf(
+                    image.fd(), image.width_px(), image.height_px(), image.pitch_bytes(),
+                    drm_format_for(image.pixel_format()), image.modifier()))};
+            output_runtime_entry->framebuffer_ptrs[index] =
+                &output_runtime_entry->framebuffers[index].value();
+            output_runtime_entry->image_ptrs[index] = &image;
+        }
         output_runtimes.push_back(std::move(output_runtime_entry));
     }
 
@@ -1290,10 +1305,8 @@ int main(int argc, char** argv) {
     state.session = session;
     state.output_runtimes = std::move(output_runtimes);
     state.output = &state.output_runtimes.front()->target;
-    state.framebuffers = &framebuffer_ptrs;
     state.renderer = &graphics.renderer.value();
     state.scene = &surface_scene;
-    state.images = &image_ptrs;
     state.listener = &listener.value();
     state.input = input_context.is_owned() ? &input_context.value() : nullptr;
     state.timer = &timer.value();
