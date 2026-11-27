@@ -54,6 +54,24 @@ auto display_service::announce_global(u32 name) -> result<void> {
     return std::unexpected(make_error(error_code::not_found, "global is unknown"));
 }
 
+auto display_service::withdraw_global(u32 name) -> result<void> {
+    for (const auto& registry : registries_) {
+        generated::wl_registry::event_global_remove event{};
+        std::get<0>(event.arguments) = name;
+        protocol_writer writer;
+        if (auto encoded =
+                generated::wl_registry::event_global_remove::encode(writer, registry->id, event);
+            !encoded) {
+            return std::unexpected(encoded.error());
+        }
+        if (auto queued = queue_event(writer); !queued) {
+            return std::unexpected(queued.error());
+        }
+    }
+    std::erase_if(globals_, [name](const registry_global& global) { return global.name == name; });
+    return {};
+}
+
 auto display_service::advertise_core(u32 output_width, u32 output_height, u32 refresh_hz) -> void {
     core_.configure_output(output_width, output_height, refresh_hz);
     add_global("wl_compositor", 4);

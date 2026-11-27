@@ -196,7 +196,8 @@ libwayland.
   blobs, and independent page flips for every enumerated output;
 - [x] per-output scene viewport offsets, so each output renders its own desktop region;
 - [x] timer-based connector re-enumeration rebuilds output runtimes, Vulkan images,
-  framebuffers, and blobs, and announces new wl_output globals to existing clients;
+  framebuffers, and blobs, announces new wl_output globals, and sends global_remove
+  with descriptor shrink for removed outputs;
 - [x] destroyed objects are reclaimed from owner storage; idle DRM atomic requests are
   released per frame, keeping RSS flat;
 - [x] coroutine `task<T>` and a per-client session coroutine in the KMS compositor;

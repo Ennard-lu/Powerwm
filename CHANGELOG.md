@@ -115,8 +115,8 @@ pre-1.0 `0.x.y` convention.
   framebuffers, and page-flip tracking, with independent presentation to every output.
 - Per-output scene viewport offsets; each output renders its own region of the desktop.
 - Timer-based connector re-enumeration rebuilds output runtimes, Vulkan images,
-  framebuffers, and property blobs, then announces new wl_output globals to existing
-  registries.
+  framebuffers, and property blobs, announces new wl_output globals, and removes stale
+  globals with `global_remove` when outputs disappear.
 - Real GTK4 Wayland client validation: GTK connects, creates surfaces, and commits a
   shm window through the KMS compositor.
 - Diagnostics: `powerwm_probe`, `powerwm_vulkan_probe`, `powerwm_vulkan_dmabuf_probe`,

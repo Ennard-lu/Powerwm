@@ -158,6 +158,7 @@ struct client_session {
     wayland::connection connection;
     wayland::display_service display;
     pwm::u32 advertised_outputs = 0;
+    std::vector<pwm::u32> output_global_names;
     pwm::task<void> loop;
     bool closed = false;
 };
@@ -604,6 +605,11 @@ auto accept_client(compositor_state& state) -> void {
         session->display.add_global("wl_output", 4);
     }
     session->advertised_outputs = static_cast<pwm::u32>(state.output_descriptors.size());
+    for (const auto& global : session->display.globals()) {
+        if (global.interface == "wl_output") {
+            session->output_global_names.push_back(global.name);
+        }
+    }
     session->display.set_surface_commit_callback(on_client_commit, session.get());
     session->display.set_presentation_feedback_callback(on_presentation_feedback, session.get());
     session->display.set_defer_frame_callbacks(true);
@@ -1140,10 +1146,19 @@ auto on_timer(void* context, event::poll_event) -> void {
                             continue;
                         }
                         session->display.configure_outputs(state.output_descriptors);
-                        while (session->advertised_outputs < descriptors.size()) {
+                        while (session->output_global_names.size() < descriptors.size()) {
                             const pwm::u32 name = session->display.add_global("wl_output", 4);
                             static_cast<void>(session->display.announce_global(name));
+                            session->output_global_names.push_back(name);
                             ++session->advertised_outputs;
+                        }
+                        while (session->output_global_names.size() > descriptors.size()) {
+                            const pwm::u32 name = session->output_global_names.back();
+                            session->output_global_names.pop_back();
+                            static_cast<void>(session->display.withdraw_global(name));
+                            if (session->advertised_outputs > 0) {
+                                --session->advertised_outputs;
+                            }
                         }
                         static_cast<void>(session->connection.flush());
                     }

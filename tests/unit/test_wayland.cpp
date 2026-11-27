@@ -3068,9 +3068,42 @@ auto test_output_descriptors() -> bool {
 
     const auto left = display.output_descriptor_for(3);
     const auto right = display.output_descriptor_for(4);
-    return saw_geometry[0] && saw_geometry[1] && saw_mode[0] && saw_mode[1] && first_x == 0 &&
-           second_x == 800 && second_scale == 2 && left && right && left->name == "left" &&
-           right->width == 1024;
+    if (!saw_geometry[0] || !saw_geometry[1] || !saw_mode[0] || !saw_mode[1] || first_x != 0 ||
+        second_x != 800 || second_scale != 2 || !left || !right || left->name != "left" ||
+        right->width != 1024) {
+        return false;
+    }
+
+    if (auto withdrawn = display.withdraw_global(second_global); !withdrawn || !server.flush()) {
+        return false;
+    }
+    std::vector<std::byte> removal_input;
+    std::vector<pwm::handle_t> removal_fds;
+    if (!drain_client(client, removal_input, removal_fds)) {
+        return false;
+    }
+    bool saw_remove = false;
+    pwm::usize removal_offset = 0;
+    while (removal_offset + sizeof(wayland::message_header) <= removal_input.size()) {
+        auto header = wayland::decode_header(
+            std::span<const std::byte>{removal_input}.subspan(removal_offset));
+        if (!header) {
+            return false;
+        }
+        const auto payload = std::span<const std::byte>{removal_input}.subspan(
+            removal_offset + sizeof(wayland::message_header),
+            header->size - sizeof(wayland::message_header));
+        wayland::protocol_reader reader{payload, std::span<const pwm::handle_t>{}};
+        if (header->object == 2 && header->opcode == 1) {
+            auto event = generated::wl_registry::event_global_remove::decode(reader);
+            if (!event) {
+                return false;
+            }
+            saw_remove = std::get<0>(event->arguments) == second_global;
+        }
+        removal_offset += header->size;
+    }
+    return saw_remove;
 }
 
 auto test_generated_descriptors() -> bool {
