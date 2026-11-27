@@ -99,6 +99,8 @@ struct output_runtime {
     std::array<const drm::dma_buf_framebuffer*, buffer_count> framebuffer_ptrs{};
     std::array<const vk::dma_buf_image*, buffer_count> image_ptrs{};
     pwm::u32 next_buffer = 0;
+    pwm::i32 viewport_x = 0;
+    pwm::i32 viewport_y = 0;
     bool waiting = false;
     bool allow_modeset = true;
     pwm::u32 waiting_ticks = 0;
@@ -1285,9 +1287,12 @@ int main(int argc, char** argv) {
     }
 
     std::vector<std::unique_ptr<output_runtime>> output_runtimes;
+    pwm::i32 viewport_x = 0;
     for (const auto& target : outputs) {
         auto output_runtime_entry = std::make_unique<output_runtime>();
         output_runtime_entry->target = target;
+        output_runtime_entry->viewport_x = viewport_x;
+        viewport_x += static_cast<pwm::i32>(target.mode.width_px());
         output_runtime_entry->ids = lookup_output_properties(device, target);
         output_runtime_entry->blob =
             pwm::raii{require_value(device.create_property_blob(target.mode.bytes()))};

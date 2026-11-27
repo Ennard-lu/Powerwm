@@ -618,6 +618,8 @@ auto scene_renderer::draw_quad(const scene::node& target, base::recti clip, f32 
                                bool shadow) noexcept -> void {
     const auto& style = target.style();
     base::recti rect = target.bounds();
+    rect.x -= static_cast<i32>(origin_.x);
+    rect.y -= static_cast<i32>(origin_.y);
     if (rect.is_empty()) {
         return;
     }
@@ -680,7 +682,9 @@ auto scene_renderer::draw_node(const scene::node& target, base::recti clip, f32 
     }
 
     const auto& style = target.style();
-    const base::recti bounds = target.bounds();
+    base::recti bounds = target.bounds();
+    bounds.x -= static_cast<i32>(origin_.x);
+    bounds.y -= static_cast<i32>(origin_.y);
     const f32 combined_opacity = opacity * target.opacity();
 
     base::recti extent = bounds;
@@ -801,8 +805,9 @@ auto scene_renderer::record_pass(void* command_buffer, const target_entry& targe
 
 auto scene_renderer::render(void* native_image, u32 width_px, u32 height_px,
                             const scene::node& root, std::span<const texture_binding> textures,
-                            const base::region& damage, vulkanpp::color clear_color) noexcept
-    -> result<void> {
+                            const base::region& damage, vulkanpp::color clear_color,
+                            base::point origin) noexcept -> result<void> {
+    origin_ = origin;
     if (native_image == nullptr || width_px == 0 || height_px == 0) {
         return std::unexpected(
             make_error(error_code::invalid_argument, "render target arguments are invalid"));

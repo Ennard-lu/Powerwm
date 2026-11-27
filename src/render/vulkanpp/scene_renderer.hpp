@@ -55,8 +55,8 @@ class scene_renderer {
 
     [[nodiscard]] auto render(void* native_image, u32 width_px, u32 height_px,
                               const scene::node& root, std::span<const texture_binding> textures,
-                              const base::region& damage, vulkanpp::color clear_color) noexcept
-        -> result<void>;
+                              const base::region& damage, vulkanpp::color clear_color,
+                              base::point origin = {}) noexcept -> result<void>;
 
     [[nodiscard]] auto statistics() const noexcept -> const frame_statistics&;
 
@@ -122,6 +122,7 @@ class scene_renderer {
     std::vector<target_entry> targets_;
     std::vector<const texture_binding*> active_bindings_;
     frame_statistics statistics_{};
+    base::point origin_{};
 };
 
 }

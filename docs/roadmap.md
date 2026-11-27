@@ -194,6 +194,7 @@ libwayland.
   with layout coordinates, scale, name, and description;
 - [x] per-output DRM runtime state, Vulkan DMA-BUF image rings, framebuffers, mode
   blobs, and independent page flips for every enumerated output;
+- [x] per-output scene viewport offsets, so each output renders its own desktop region;
 - [x] timer-based connector re-enumeration detects output count changes; runtime rebuild
   is logged but not yet applied;
 - [x] destroyed objects are reclaimed from owner storage; idle DRM atomic requests are
