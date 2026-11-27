@@ -210,7 +210,8 @@ libwayland.
 - [x] in-tree socket handshake and raw-wire client verification;
 - [x] in-tree socket handshake, shm surface commit, and KMS presentation;
 - [x] deterministic wire-message and protocol-XML fuzz coverage;
-- [ ] broader real-client matrix (GTK, Qt, foot).
+- [x] GTK4 and Qt6 clients on dual outputs;
+- [ ] foot client (requires installing the package).
 
 Exit: handshake with real libwayland clients; fd stress test; protocol errors do not
 crash; 24-hour fuzz; no `libwayland-*` in `ldd`.
